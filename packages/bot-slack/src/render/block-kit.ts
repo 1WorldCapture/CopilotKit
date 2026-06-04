@@ -158,6 +158,41 @@ function renderNode(node: IRNode, out: KnownBlock[]): void {
       } as KnownBlock);
       return;
     }
+    case "table": {
+      // Native Slack Table block: rows of `{ type: "raw_text", text }` cells.
+      // Header row from `columns`, data rows from `row`/`cell` children.
+      // Not yet in `@slack/types`, so the block is built plain and cast.
+      const cellOf = (text: string): { type: "raw_text"; text: string } => ({
+        type: "raw_text",
+        text: truncateText(text, SLACK_LIMITS.cellText),
+      });
+
+      const columnsProp = props.columns as
+        | { header: string; align?: "left" | "center" | "right" }[]
+        | undefined;
+      const columns = columnsProp
+        ? clampArray(columnsProp, SLACK_LIMITS.tableColumns).items
+        : undefined;
+
+      const rows: { type: "raw_text"; text: string }[][] = [];
+      if (columns && columns.length > 0) {
+        rows.push(columns.map((c) => cellOf(c.header)));
+      }
+
+      const rowNodes = childNodes(node).filter((c) => c.type === "row");
+      const { items: dataRows } = clampArray(rowNodes, SLACK_LIMITS.tableRows);
+      for (const rowNode of dataRows) {
+        const cells = childNodes(rowNode).filter((c) => c.type === "cell");
+        rows.push(cells.map((cell) => cellOf(collectText(cell))));
+      }
+
+      const block: Record<string, unknown> = { type: "table", rows };
+      if (columns) {
+        block.column_settings = columns.map((c) => ({ align: c.align ?? "left" }));
+      }
+      out.push(block as unknown as KnownBlock);
+      return;
+    }
     case "raw": {
       const value = props.value;
       const native = Array.isArray(value) ? value : [value];

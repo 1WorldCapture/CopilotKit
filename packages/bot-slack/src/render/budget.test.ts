@@ -37,4 +37,12 @@ describe("budget: clampArray", () => {
     expect(clampArray(Array(60).fill(0), SLACK_LIMITS.blocksPerMessage).items.length).toBe(50);
     expect(clampArray(Array(150).fill(0), SLACK_LIMITS.selectOptions).items.length).toBe(100);
   });
+  it("clamps table columns to 20 and table rows to 100", () => {
+    const cols = clampArray(Array(30).fill(0), SLACK_LIMITS.tableColumns);
+    expect(cols.items.length).toBe(20);
+    expect(cols.overflow).toBe(10);
+    const rows = clampArray(Array(150).fill(0), SLACK_LIMITS.tableRows);
+    expect(rows.items.length).toBe(100);
+    expect(rows.overflow).toBe(50);
+  });
 });

@@ -88,6 +88,47 @@ describe("renderBlockKit", () => {
     expect(select.action_id.length).toBeGreaterThan(0);
   });
 
+  it("renders a Table IR into a native Slack table block", () => {
+    const ir: IRNode[] = [
+      {
+        type: "table",
+        props: {
+          columns: [
+            { header: "Name" },
+            { header: "Status", align: "center" },
+          ],
+          children: [
+            {
+              type: "row",
+              props: {
+                children: [
+                  { type: "cell", props: { children: [{ type: "text", props: { value: "Ana" } }] } },
+                  { type: "cell", props: { children: [{ type: "text", props: { value: "Active" } }] } },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ];
+    expect(renderBlockKit(ir)).toEqual([
+      {
+        type: "table",
+        rows: [
+          [
+            { type: "raw_text", text: "Name" },
+            { type: "raw_text", text: "Status" },
+          ],
+          [
+            { type: "raw_text", text: "Ana" },
+            { type: "raw_text", text: "Active" },
+          ],
+        ],
+        column_settings: [{ align: "left" }, { align: "center" }],
+      },
+    ]);
+  });
+
   it("passes raw native Block Kit through unchanged", () => {
     expect(
       renderBlockKit([

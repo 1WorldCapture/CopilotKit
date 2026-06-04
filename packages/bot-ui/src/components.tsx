@@ -30,3 +30,12 @@ export function Input(
 ): IRNode {
   return { type: "input", props };
 }
+
+export function Table(props: {
+  columns?: { header: string; align?: "left" | "center" | "right" }[];
+  children?: unknown;
+}): IRNode {
+  return { type: "table", props };
+}
+export const Row = intrinsic("row");
+export const Cell = intrinsic("cell");
