@@ -6,6 +6,8 @@ export interface Thread {
   post(ui: unknown): Promise<MessageRef>;
   update(ref: MessageRef, ui: unknown): Promise<MessageRef>;
   delete(ref: MessageRef): Promise<void>;
+  /** Post a picker and block until an interaction resolves it to the clicked button's `value`. */
+  awaitChoice(ui: unknown): Promise<unknown>;
   runAgent(input?: unknown): Promise<MessageRef | undefined>;
   resume(value: unknown): Promise<MessageRef | undefined>;
   stream(src: string | AsyncIterable<string>): Promise<MessageRef>;

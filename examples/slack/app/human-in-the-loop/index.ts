@@ -10,3 +10,4 @@
  */
 export { ConfirmWrite } from "./confirm-write.js";
 export type { ConfirmWriteProps } from "./confirm-write.js";
+export { confirmWriteTool, confirmWriteSchema } from "./confirm-write-tool.js";

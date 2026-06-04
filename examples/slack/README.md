@@ -134,7 +134,7 @@ transport-only — it downloads the upload and delivers it to the agent as
 multimodal content; the **app** decides what to do.
 
 > **PDFs and images need a vision/document-capable model.** The default
-> `openai/gpt-4.1` reads both natively through this path, as do recent Claude
+> `openai/gpt-5.5` reads both natively through this path, as do recent Claude
 > (`anthropic/claude-sonnet-4-6`) and Gemini (`google/gemini-2.5-*`) models.
 > An older text-only model will ignore the attached document.
 
@@ -158,7 +158,7 @@ npx playwright install chromium
 ```
 
 Notes: image analysis needs a vision-capable `AGENT_MODEL` (e.g.
-`openai/gpt-4.1`, `anthropic/claude-sonnet-4.5`). Inbound files are capped
+`openai/gpt-5.5`, `anthropic/claude-sonnet-4.5`). Inbound files are capped
 (8 MiB/file, 5 files, 200 KiB of decoded text) — tune via
 `createSlackBridge({ files: { … } })`. The chart/diagram libraries load from a
 CDN into the local browser (override `CHART_JS_URL` / `MERMAID_URL`); your
