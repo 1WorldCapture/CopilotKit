@@ -1,0 +1,230 @@
+import type { IRNode } from "@copilotkit/bot-ui";
+import type { KnownBlock } from "@slack/types";
+import { markdownToMrkdwn } from "../markdown-to-mrkdwn.js";
+import { SLACK_LIMITS, clampArray, truncateText } from "./budget.js";
+
+/**
+ * Render a cross-platform component IR tree (already expanded by `renderToIR`
+ * and pre-bound by the action registry, so event props are `{ id }`) into a
+ * Slack Block Kit `KnownBlock[]`.
+ *
+ * The renderer is total: unknown intrinsic types are skipped rather than
+ * throwing. Per-element Slack limits are applied via {@link truncateText} and
+ * {@link clampArray}; nothing is silently dropped — overflowing collections
+ * clamp and, at the top level, append an explicit overflow signal block.
+ */
+export function renderBlockKit(ir: IRNode[]): KnownBlock[] {
+  const blocks: KnownBlock[] = [];
+  for (const node of ir) {
+    renderNode(node, blocks);
+  }
+
+  // Top-level budget: clamp to the per-message block ceiling, leaving room for
+  // an overflow-signal context block when we had to drop anything.
+  const { items, overflow } = clampArray(blocks, SLACK_LIMITS.blocksPerMessage);
+  if (overflow <= 0) return items;
+
+  // Drop the last kept block to make room for the signal so we land at exactly
+  // the ceiling (49 kept + 1 signal = 50) instead of exceeding it.
+  const kept = items.slice(0, SLACK_LIMITS.blocksPerMessage - 1);
+  const dropped = overflow + 1;
+  kept.push(overflowSignal(dropped));
+  return kept;
+}
+
+function overflowSignal(count: number): KnownBlock {
+  return {
+    type: "context",
+    elements: [{ type: "mrkdwn", text: `_…+${count} more blocks truncated_` }],
+  } as KnownBlock;
+}
+
+/** Render a single IR node, pushing zero or more blocks onto `out`. */
+function renderNode(node: IRNode, out: KnownBlock[]): void {
+  if (typeof node.type !== "string") return; // non-intrinsic — already expanded away
+  const props = node.props ?? {};
+  switch (node.type) {
+    case "message": {
+      // The message container is not a block; flatten its children.
+      for (const child of childNodes(node)) renderNode(child, out);
+      return;
+    }
+    case "header": {
+      out.push({
+        type: "header",
+        text: { type: "plain_text", text: truncateText(collectText(node), 150) },
+      } as KnownBlock);
+      return;
+    }
+    case "section":
+    case "markdown": {
+      out.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: truncateText(markdownToMrkdwn(collectText(node)), SLACK_LIMITS.sectionText),
+        },
+      } as KnownBlock);
+      return;
+    }
+    case "fields": {
+      const fieldChildren = childNodes(node).filter((c) => c.type === "field");
+      const { items } = clampArray(fieldChildren, SLACK_LIMITS.fieldsPerSection);
+      out.push({
+        type: "section",
+        fields: items.map((f) => ({
+          type: "mrkdwn",
+          text: truncateText(markdownToMrkdwn(collectText(f)), SLACK_LIMITS.fieldText),
+        })),
+      } as KnownBlock);
+      return;
+    }
+    case "field": {
+      // Standalone field (rare) → single-field section.
+      out.push({
+        type: "section",
+        fields: [
+          {
+            type: "mrkdwn",
+            text: truncateText(markdownToMrkdwn(collectText(node)), SLACK_LIMITS.fieldText),
+          },
+        ],
+      } as KnownBlock);
+      return;
+    }
+    case "context": {
+      const { items } = clampArray(childNodes(node), SLACK_LIMITS.contextElements);
+      out.push({
+        type: "context",
+        elements: items.map((c) => ({
+          type: "mrkdwn",
+          text: markdownToMrkdwn(collectText(c)),
+        })),
+      } as KnownBlock);
+      return;
+    }
+    case "actions": {
+      const { items } = clampArray(childNodes(node), SLACK_LIMITS.actionsElements);
+      const elements = items.map(renderActionElement).filter((e): e is object => e !== null);
+      out.push({ type: "actions", elements } as KnownBlock);
+      return;
+    }
+    case "image": {
+      const url = (props.url ?? props.image_url) as string | undefined;
+      out.push({
+        type: "image",
+        image_url: url ?? "",
+        alt_text: (props.alt ?? props.altText ?? "") as string,
+      } as KnownBlock);
+      return;
+    }
+    case "divider": {
+      out.push({ type: "divider" } as KnownBlock);
+      return;
+    }
+    case "text": {
+      // Bare top-level text → a mrkdwn section.
+      const value = String(props.value ?? "");
+      out.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: truncateText(markdownToMrkdwn(value), SLACK_LIMITS.sectionText),
+        },
+      } as KnownBlock);
+      return;
+    }
+    case "raw": {
+      const value = props.value;
+      const native = Array.isArray(value) ? value : [value];
+      for (const b of native) {
+        if (b != null) out.push(b as KnownBlock);
+      }
+      return;
+    }
+    default:
+      // Unknown intrinsic — skip silently (total renderer).
+      return;
+  }
+}
+
+/**
+ * Render one interactive element inside an `actions` block. Returns `null` for
+ * children that aren't renderable as action elements (so callers can filter).
+ */
+function renderActionElement(node: IRNode): object | null {
+  if (typeof node.type !== "string") return null;
+  const props = node.props ?? {};
+  switch (node.type) {
+    case "button": {
+      const action_id = truncateText(buttonActionId(props), SLACK_LIMITS.actionId);
+      const el: Record<string, unknown> = {
+        type: "button",
+        action_id,
+        text: { type: "plain_text", text: truncateText(collectText(node), SLACK_LIMITS.buttonText) },
+      };
+      if (props.value !== undefined) {
+        el.value = truncateText(JSON.stringify(props.value), SLACK_LIMITS.buttonValue);
+      }
+      if (props.style === "primary" || props.style === "danger") {
+        el.style = props.style;
+      }
+      return el;
+    }
+    case "select": {
+      const action_id = idFromHandler(props.onSelect);
+      const options = (props.options as { label: string; value: unknown }[] | undefined) ?? [];
+      const { items } = clampArray(options, SLACK_LIMITS.selectOptions);
+      const el: Record<string, unknown> = {
+        type: "static_select",
+        ...(action_id ? { action_id } : {}),
+        placeholder: { type: "plain_text", text: String(props.placeholder ?? " ") },
+        options: items.map((o) => ({
+          text: { type: "plain_text", text: o.label },
+          value: String(o.value),
+        })),
+      };
+      return el;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Derive a button's `action_id`: prefer the registry-stamped id, else a stable fallback. */
+function buttonActionId(props: Record<string, unknown>): string {
+  const fromHandler = idFromHandler(props.onClick);
+  if (fromHandler) return fromHandler;
+  return props.value !== undefined ? JSON.stringify(props.value) : "action";
+}
+
+/** Extract `{ id }` stamped onto an event prop by the action registry, if present. */
+function idFromHandler(handler: unknown): string | undefined {
+  if (handler && typeof handler === "object" && "id" in handler) {
+    const id = (handler as { id?: unknown }).id;
+    if (typeof id === "string") return id;
+  }
+  return undefined;
+}
+
+/** The expanded `children` of an IR node as an `IRNode[]` (empty if none). */
+function childNodes(node: IRNode): IRNode[] {
+  const children = node.props?.children;
+  if (Array.isArray(children)) return children as IRNode[];
+  if (children && typeof children === "object" && "type" in (children as object)) {
+    return [children as IRNode];
+  }
+  return [];
+}
+
+/** Concatenate the `value` of all descendant `text` nodes (depth-first). */
+function collectText(node: IRNode): string {
+  if (typeof node.type === "string" && node.type === "text") {
+    return String(node.props?.value ?? "");
+  }
+  let acc = "";
+  for (const child of childNodes(node)) {
+    acc += collectText(child);
+  }
+  return acc;
+}
