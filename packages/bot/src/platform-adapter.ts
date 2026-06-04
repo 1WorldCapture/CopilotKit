@@ -1,4 +1,4 @@
-import type { AgentSubscriber } from "@ag-ui/client";
+import type { AgentSubscriber, AbstractAgent } from "@ag-ui/client";
 import type { IRNode, MessageRef, PlatformUser } from "@copilotkit/bot-ui";
 
 /** Opaque to the bot core — created by an adapter during ingress and passed back to post/createRunRenderer. */
@@ -59,9 +59,18 @@ export interface UserQuery {
   query: string;
 }
 
-/** Adapter-owned conversation state; opaque to the bot core (the adapter builds the agent's history from it). */
+/** A resolved agent session for a conversation (the adapter may build the agent's history from its own state). */
+export interface AgentSession {
+  agent: AbstractAgent;
+}
+
+/** Adapter-owned conversation state; the adapter resolves (or creates) the agent session for a conversation. */
 export interface ConversationStore {
-  [k: string]: unknown;
+  getOrCreate(
+    conversationKey: string,
+    replyTarget: ReplyTarget,
+    makeAgent: (threadId: string) => AbstractAgent,
+  ): Promise<AgentSession>;
 }
 
 export interface PlatformAdapter {

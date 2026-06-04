@@ -43,7 +43,11 @@ export class FakeAdapter implements PlatformAdapter {
     supportsStreaming: true,
   };
   readonly ackDeadlineMs = 3000;
-  readonly conversationStore: ConversationStore = {};
+  readonly conversationStore: ConversationStore = {
+    async getOrCreate(conversationKey, _replyTarget, makeAgent) {
+      return { agent: makeAgent(conversationKey) };
+    },
+  };
 
   posted: IRNode[][] = [];
   updated: { ref: MessageRef; ir: IRNode[] }[] = [];

@@ -18,6 +18,14 @@ export class ActionExpiredError extends Error {
 
 const EVENT_PROPS = ["onClick", "onSelect", "onSubmit"] as const;
 
+function isComponentElement(
+  ui: unknown,
+): ui is { type: ComponentFn; props: Record<string, unknown> } {
+  return (
+    typeof ui === "object" && ui !== null && typeof (ui as { type?: unknown }).type === "function"
+  );
+}
+
 export class ActionRegistry {
   private store: ActionStore;
   private components = new Map<string, ComponentFn>();
@@ -45,6 +53,23 @@ export class ActionRegistry {
     const fn = this.components.get(componentName);
     const root = renderToIR((fn ? fn(props) : props) as Renderable);
     await this.walk(root, [], componentName, props, conversationKey);
+    return root;
+  }
+
+  // Binds an arbitrary Renderable for posting. If `ui` is a component element
+  // (`{ type: fn, props }`), it is registered + bound by name (cold-path
+  // re-render supported). Otherwise the IR is bound inline with `component:""`,
+  // meaning a cold-cache dispatch throws ActionExpiredError (intended
+  // degradation for inline handlers that can't be re-derived).
+  async bindRenderable(ui: Renderable, conversationKey: string): Promise<IRNode[]> {
+    if (isComponentElement(ui)) {
+      const fn = ui.type;
+      const name = fn.name || "anonymous";
+      this.registerComponent(name, fn);
+      return this.bindTree(name, (ui.props ?? {}) as Record<string, unknown>, conversationKey);
+    }
+    const root = renderToIR(ui);
+    await this.walk(root, [], "", undefined, conversationKey);
     return root;
   }
 
