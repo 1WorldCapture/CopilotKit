@@ -13,19 +13,17 @@ import { renderChartTool } from "./render-chart.js";
 import { renderDiagramTool } from "./render-diagram.js";
 import { renderTableTool } from "./render-table.js";
 import { issueCardTool, issueListTool, pageListTool } from "./render-tools.js";
-import type { BotTool } from "@copilotkit/bot";
+import type { AnyBotTool } from "@copilotkit/bot";
 
 /**
  * The Slack-context tools (read_thread, render_*) are typed
  * `BotTool<Schema, SlackToolContext>`: their handler ctx is narrowed to the
- * Slack tool context the adapter supplies at call time. That narrowed handler
- * is not *structurally* assignable to the base `BotTool` (whose ctx is the
- * open `Record<string, unknown>`), so we widen them back to `BotTool` here —
- * the same shape `createBot({ tools })` and `defaultSlackTools` use. The cast
- * is sound: the Slack adapter merges the real `SlackToolContext` into every
- * tool-call ctx (see `SlackAdapter.toolContext`).
+ * Slack tool context the adapter supplies at call time. `AnyBotTool` is the
+ * adapter-agnostic tool shape `createBot({ tools })` accepts — its ctx is
+ * supplied at runtime by the adapter (see `SlackAdapter.toolContext`), so the
+ * Slack-narrowed tools assign directly with no cast.
  */
-export const appTools: BotTool[] = [
+export const appTools: AnyBotTool[] = [
   readThreadTool,
   renderChartTool,
   renderDiagramTool,
@@ -33,7 +31,7 @@ export const appTools: BotTool[] = [
   issueCardTool,
   issueListTool,
   pageListTool,
-] as unknown as BotTool[];
+];
 
 export {
   readThreadTool,

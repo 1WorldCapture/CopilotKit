@@ -10,7 +10,7 @@
  * (below) is right there in the file you copy from to start a new bot.
  */
 import "dotenv/config";
-import { createBot, type BotTool, type ContextEntry } from "@copilotkit/bot";
+import { createBot, type ContextEntry } from "@copilotkit/bot";
 import type { PlatformUser } from "@copilotkit/bot-ui";
 import {
   slack,
@@ -68,11 +68,11 @@ async function main() {
     // `defaultSlackTools` ships `lookup_slack_user` (used for @-mentions);
     // `appTools` adds this bot's tools (read_thread, render_*, issue/page
     // cards). Both carry Slack-narrowed handler ctx (`SlackToolContext`),
-    // which the adapter supplies per call but isn't structurally assignable
-    // to the base `BotTool` ctx — so widen at the boundary (sound: see
-    // `SlackAdapter.toolContext`). `defaultSlackContext` ships tagging/
-    // mrkdwn/thread-model guidance; `appContext` adds identity + triage policy.
-    tools: [...defaultSlackTools, ...appTools] as unknown as BotTool[],
+    // which the adapter supplies per call; `createBot` accepts them as
+    // `AnyBotTool[]` (ctx provided at runtime — see `SlackAdapter.toolContext`),
+    // so no cast is needed. `defaultSlackContext` ships tagging/mrkdwn/
+    // thread-model guidance; `appContext` adds identity + triage policy.
+    tools: [...defaultSlackTools, ...appTools],
     context: [...defaultSlackContext, ...appContext],
   });
 
