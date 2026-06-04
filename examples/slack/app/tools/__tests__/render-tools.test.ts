@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { FrontendToolContext } from "@copilotkit/slack";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 // Mock the local renderers so no headless browser is launched.
 const renderChart = vi.fn(async () => Buffer.from("CHARTPNG"));
@@ -10,6 +10,9 @@ vi.mock("../../render/diagram.js", () => ({ renderDiagram }));
 const { renderChartTool } = await import("../render-chart.js");
 const { renderDiagramTool } = await import("../render-diagram.js");
 
+/** The ctx a SlackToolContext-bound BotTool handler receives. */
+type HandlerCtx = Parameters<typeof renderChartTool.handler>[1];
+
 function makeCtx() {
   const postFile = vi.fn(async () => ({ ok: true, fileId: "F1" }));
   const ctx = {
@@ -19,7 +22,7 @@ function makeCtx() {
     botUserId: "BOT",
     conversationKey: "C1::100.0",
     postFile,
-  } as FrontendToolContext;
+  } satisfies SlackToolContext as unknown as HandlerCtx;
   return { ctx, postFile };
 }
 

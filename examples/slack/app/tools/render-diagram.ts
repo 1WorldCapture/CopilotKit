@@ -5,7 +5,8 @@
  * and retry rather than posting a broken image.
  */
 import { z } from "zod";
-import type { FrontendTool } from "@copilotkit/slack";
+import type { BotTool } from "@copilotkit/bot";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderDiagram } from "../render/diagram.js";
 
 const schema = z.object({
@@ -30,7 +31,7 @@ function slug(s: string): string {
   );
 }
 
-export const renderDiagramTool: FrontendTool<typeof schema> = {
+export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
   name: "render_diagram",
   description:
     "Render a Mermaid diagram as an image and post it to the Slack thread. " +

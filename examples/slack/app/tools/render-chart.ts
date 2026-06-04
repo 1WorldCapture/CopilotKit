@@ -5,7 +5,8 @@
  * get a chart" payoff: the agent parses the data, then calls this.
  */
 import { z } from "zod";
-import type { FrontendTool } from "@copilotkit/slack";
+import type { BotTool } from "@copilotkit/bot";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderChart } from "../render/chart.js";
 
 const schema = z.object({
@@ -62,7 +63,7 @@ function slug(s: string): string {
   );
 }
 
-export const renderChartTool: FrontendTool<typeof schema> = {
+export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
   name: "render_chart",
   description:
     "Render a chart as an image and post it to the Slack thread. Pass a " +

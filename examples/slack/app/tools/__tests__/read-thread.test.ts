@@ -1,17 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
 import { readThreadTool } from "../read-thread.js";
-import type { FrontendToolContext } from "@copilotkit/slack";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
+
+/** The ctx a SlackToolContext-bound BotTool handler receives. */
+type HandlerCtx = Parameters<typeof readThreadTool.handler>[1];
 
 /**
- * Build a fake FrontendToolContext. Follows the slack package's own test
- * convention of `client: {...} as never` for the WebClient stub — the
- * handler only touches `client.conversations.replies`.
+ * Build a fake handler ctx. Follows the slack package's own test convention
+ * of `client: {...} as never` for the WebClient stub — the handler only
+ * touches `client.conversations.replies`. The `thread`/`platform` fields the
+ * BotTool ctx adds are unused by this handler, so we cast the Slack-only
+ * literal to the handler ctx type.
  */
 function makeCtx(
   repliesImpl: () => unknown,
-  overrides: Partial<FrontendToolContext> = {},
-): FrontendToolContext {
-  return {
+  overrides: Partial<SlackToolContext> = {},
+): HandlerCtx {
+  const ctx: SlackToolContext = {
     client: { conversations: { replies: vi.fn(repliesImpl) } } as never,
     channel: "C123",
     threadTs: "1700000000.000100",
@@ -20,6 +25,7 @@ function makeCtx(
     postFile: async () => ({ ok: true }),
     ...overrides,
   };
+  return ctx as unknown as HandlerCtx;
 }
 
 describe("read_thread tool", () => {

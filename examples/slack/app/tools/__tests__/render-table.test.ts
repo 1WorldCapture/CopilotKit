@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import type { FrontendToolContext } from "@copilotkit/slack";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 import {
   renderTableTool,
   buildTableBlock,
   toMonospaceTable,
 } from "../render-table.js";
+
+/** The ctx a SlackToolContext-bound BotTool handler receives. */
+type HandlerCtx = Parameters<typeof renderTableTool.handler>[1];
 
 const COLS = [
   { header: "Issue" },
@@ -15,14 +18,14 @@ const ROWS = [
   ["CPK-2", "Low"],
 ];
 
-function makeCtx(postMessage: unknown): FrontendToolContext {
+function makeCtx(postMessage: unknown): HandlerCtx {
   return {
     client: { chat: { postMessage } },
     channel: "C1",
     threadTs: "100.0",
     botUserId: "BOT",
     conversationKey: "C1::100.0",
-  } as unknown as FrontendToolContext;
+  } as unknown as HandlerCtx;
 }
 
 describe("buildTableBlock", () => {

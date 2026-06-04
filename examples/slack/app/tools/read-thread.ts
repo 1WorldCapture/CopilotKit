@@ -5,12 +5,13 @@
  * gets the actual messages, and summarizes those instead of inventing
  * content.
  *
- * It's a worked example of a `FrontendTool` that reaches into Slack via
- * the `ctx` (the `WebClient` + channel + thread ts) — the same shape any
+ * It's a worked example of a `BotTool` that reaches into Slack via the
+ * `ctx` (the `WebClient` + channel + thread ts) — the same shape any
  * Slack-aware tool uses.
  */
 import { z } from "zod";
-import type { FrontendTool } from "@copilotkit/slack";
+import type { BotTool } from "@copilotkit/bot";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 const readThreadSchema = z.object({
   limit: z
@@ -31,7 +32,7 @@ interface SlackReply {
   ts?: string;
 }
 
-export const readThreadTool: FrontendTool<typeof readThreadSchema> = {
+export const readThreadTool: BotTool<typeof readThreadSchema, SlackToolContext> = {
   name: "read_thread",
   description:
     "Fetch the messages in the current Slack thread so you can summarize or " +

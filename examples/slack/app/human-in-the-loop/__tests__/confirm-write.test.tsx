@@ -93,7 +93,7 @@ describe("ConfirmWrite", () => {
     await (create.props.onClick as ClickHandler)(ctx);
 
     expect(update).toHaveBeenCalledTimes(1);
-    const [ref, renderable] = update.mock.calls[0] as [{ id: string }, Parameters<typeof renderToIR>[0]];
+    const [ref, renderable] = update.mock.calls[0] as unknown as [{ id: string }, Parameters<typeof renderToIR>[0]];
     expect(ref).toEqual({ id: "m1" });
 
     const { blocks, accent } = renderSlackMessage(renderToIR(renderable));
@@ -119,7 +119,7 @@ describe("ConfirmWrite", () => {
     await (cancel.props.onClick as ClickHandler)(ctx);
 
     expect(update).toHaveBeenCalledTimes(1);
-    const [ref, renderable] = update.mock.calls[0] as [{ id: string }, Parameters<typeof renderToIR>[0]];
+    const [ref, renderable] = update.mock.calls[0] as unknown as [{ id: string }, Parameters<typeof renderToIR>[0]];
     expect(ref).toEqual({ id: "m1" });
 
     const { blocks, accent } = renderSlackMessage(renderToIR(renderable));

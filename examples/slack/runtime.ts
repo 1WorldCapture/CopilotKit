@@ -176,7 +176,7 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 const model =
-  (process.env["AGENT_MODEL"] as BuiltInAgentModel) ?? "openai/gpt-4.1";
+  (process.env["AGENT_MODEL"] as BuiltInAgentModel) ?? "openai/gpt-5.5";
 
 // Fail loud at startup on a misspelled provider/model rather than on the
 // first agent invocation. (The model's API key is read from env at run time.)

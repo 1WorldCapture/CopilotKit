@@ -3,22 +3,23 @@
  * code. The companion `runtime.ts` holds the AG-UI agent backend (a
  * CopilotKit `BuiltInAgent` wired to the Linear + Notion MCP servers);
  * this directory holds everything that runs on the Slack side of the
- * bridge for this specific bot.
+ * bot for this specific deployment.
  *
  * Defaults are not auto-applied — you spread them explicitly. That's
  * deliberate: there's no hidden behavior, and the canonical pattern
  * (below) is right there in the file you copy from to start a new bot.
  */
 import "dotenv/config";
+import { createBot, type BotTool, type ContextEntry } from "@copilotkit/bot";
+import type { PlatformUser } from "@copilotkit/bot-ui";
 import {
-  createSlackBridge,
+  slack,
   defaultSlackTools,
   defaultSlackContext,
-} from "@copilotkit/slack";
+  SanitizingHttpAgent,
+} from "@copilotkit/bot-slack";
 import { appTools } from "./tools/index.js";
 import { appContext } from "./context/app-context.js";
-import { appComponents } from "./components/index.js";
-import { appHitl } from "./human-in-the-loop/index.js";
 import { closeBrowser } from "./render/browser.js";
 
 const required = (name: string): string => {
@@ -30,40 +31,67 @@ const required = (name: string): string => {
   return v;
 };
 
+/**
+ * Build the per-turn context naming the requesting Slack user, so the
+ * agent can act "as" them (filter Linear by their email, @-mention them).
+ * The Slack adapter resolves `{id, name?, email?}` per turn; if it's
+ * absent there's nothing to attribute, so we add no entry.
+ */
+function senderContext(user: PlatformUser | undefined): ContextEntry[] {
+  if (!user) return [];
+  const label = `${user.name ?? user.id}${user.email ? ` <${user.email}>` : ""} (Slack id ${user.id})`;
+  return [{ description: "Requesting Slack user", value: label }];
+}
+
 async function main() {
-  const bridge = createSlackBridge({
-    agentUrl: required("AGENT_URL"),
-    slackBotToken: required("SLACK_BOT_TOKEN"),
-    slackAppToken: required("SLACK_APP_TOKEN"),
-    agentHeaders: process.env.AGENT_AUTH_HEADER
-      ? { Authorization: process.env.AGENT_AUTH_HEADER }
-      : undefined,
-    // `defaultSlackTools` ships `lookup_slack_user` (used for @-mentions).
-    // `defaultSlackContext` ships tagging/mrkdwn/thread-model guidance.
-    // Spread both, then add anything app-specific on top.
-    tools: [...defaultSlackTools, ...appTools],
-    // `defaultSlackContext` ships tagging/mrkdwn/thread-model guidance;
-    // `appContext` adds this bot's identity and triage policy.
+  const agentUrl = required("AGENT_URL");
+  const agentHeaders = process.env.AGENT_AUTH_HEADER
+    ? { Authorization: process.env.AGENT_AUTH_HEADER }
+    : undefined;
+
+  const bot = createBot({
+    adapters: [
+      slack({
+        botToken: required("SLACK_BOT_TOKEN"),
+        appToken: required("SLACK_APP_TOKEN"),
+      }),
+    ],
+    // One AG-UI agent per Slack conversation. The backend is a CopilotKit
+    // `BuiltInAgent` (CopilotSseRuntime), which does NOT require a
+    // UUID-format threadId, so the raw conversation thread id is fine.
+    // (The old LangGraph bridge hashed it to a UUID; not needed here.)
+    agent: (threadId) => {
+      const a = new SanitizingHttpAgent({ url: agentUrl, headers: agentHeaders });
+      a.threadId = threadId;
+      return a;
+    },
+    // `defaultSlackTools` ships `lookup_slack_user` (used for @-mentions);
+    // `appTools` adds this bot's tools (read_thread, render_*, issue/page
+    // cards). Both carry Slack-narrowed handler ctx (`SlackToolContext`),
+    // which the adapter supplies per call but isn't structurally assignable
+    // to the base `BotTool` ctx — so widen at the boundary (sound: see
+    // `SlackAdapter.toolContext`). `defaultSlackContext` ships tagging/
+    // mrkdwn/thread-model guidance; `appContext` adds identity + triage policy.
+    tools: [...defaultSlackTools, ...appTools] as unknown as BotTool[],
     context: [...defaultSlackContext, ...appContext],
-    // Agent-renderable Block Kit components (the Slack equivalent of
-    // React's `useComponent`). The bridge auto-converts each to a
-    // frontend tool whose `execute` posts the rendered blocks — here,
-    // the issue_list and page_list cards.
-    components: appComponents,
-    // Interactive components (the Slack equivalent of React's
-    // `useHumanInTheLoop`). The agent calls these like tools; they
-    // render Block Kit buttons and the tool call blocks until the user
-    // clicks. The bridge then resolves with the chosen action so the
-    // agent run continues with the user's decision in scope — here, the
-    // confirm_write gate in front of every Linear/Notion write.
-    humanInTheLoopComponents: appHitl,
   });
 
-  await bridge.start();
+  // Register ONLY onMention. The Slack listener already pre-filters ingress
+  // to the turns this bot should answer — @-mentions, replies in threads it
+  // owns, and DMs — and an `IncomingTurn` carries no mention/message
+  // distinction. createBot is mention-preferred: when any mention handler is
+  // registered it routes ALL turns to it. So this single handler covers
+  // mentions, owned-thread replies, AND DMs; a second onMessage handler would
+  // never fire (and registering both would risk double-handling).
+  bot.onMention(async ({ thread, message }) => {
+    await thread.runAgent({ context: senderContext(message.user) });
+  });
+
+  await bot.start();
 
   const shutdown = async (signal: string) => {
-    console.log(`\n[slack-bridge] received ${signal}, stopping…`);
-    await bridge.stop();
+    console.log(`\n[slack-bot] received ${signal}, stopping…`);
+    await bot.stop();
     // Tear down the shared headless browser used for chart/diagram rendering.
     await closeBrowser();
     process.exit(0);
@@ -73,6 +101,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("[slack-bridge] fatal", err);
+  console.error("[slack-bot] fatal", err);
   process.exit(1);
 });

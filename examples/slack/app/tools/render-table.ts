@@ -11,7 +11,8 @@
  */
 import { z } from "zod";
 import type { KnownBlock } from "@slack/types";
-import type { FrontendTool } from "@copilotkit/slack";
+import type { BotTool } from "@copilotkit/bot";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 const schema = z.object({
   title: z
@@ -116,7 +117,7 @@ export function toMonospaceTable(cols: Column[], dataRows: string[][]): string {
   return "```\n" + [fmt(header), ...body.map(fmt)].join("\n") + "\n```";
 }
 
-export const renderTableTool: FrontendTool<typeof schema> = {
+export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
   name: "render_table",
   description:
     "Render tabular data as a table posted to the Slack thread. Pass columns " +

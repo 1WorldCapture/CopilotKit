@@ -8,9 +8,9 @@
  * `context` on every turn; the agent backend surfaces them as a
  * system-level "App Context:" message.
  */
-import type { SlackContextEntry } from "@copilotkit/slack";
+import type { ContextEntry } from "@copilotkit/bot";
 
-export const appContext: ReadonlyArray<SlackContextEntry> = [
+export const appContext: ReadonlyArray<ContextEntry> = [
   {
     description: "Bot identity & tone",
     value: [
