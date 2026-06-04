@@ -19,7 +19,7 @@ import { SlackConversationStore } from "./conversation-store.js";
 import { attachSlackListener } from "./slack-listener.js";
 import { createRunRenderer } from "./event-renderer.js";
 import { decodeInteraction, conversationKeyOf } from "./interaction.js";
-import { renderBlockKit } from "./render/block-kit.js";
+import { renderBlockKit, renderSlackMessage } from "./render/block-kit.js";
 import { ChunkedMessageStream } from "./chunked-message-stream.js";
 import { autoCloseOpenMarkdown } from "./auto-close-streaming.js";
 import { markdownToMrkdwn } from "./markdown-to-mrkdwn.js";
@@ -127,24 +127,43 @@ export class SlackAdapter implements PlatformAdapter {
 
   async post(target: BotReplyTarget, ir: IRNode[]): Promise<MessageRef> {
     const t = target as ReplyTarget;
-    const blocks = renderBlockKit(ir);
-    const res = await this.client.chat.postMessage({
-      channel: t.channel,
-      thread_ts: t.threadTs,
-      blocks,
-      text: fallbackText(ir),
-    });
+    const { blocks, accent } = renderSlackMessage(ir);
+    const res = await this.client.chat.postMessage(
+      accent
+        ? ({
+            channel: t.channel,
+            thread_ts: t.threadTs,
+            text: fallbackText(ir),
+            attachments: [{ color: accent, blocks }],
+          } as unknown as Parameters<WebClient["chat"]["postMessage"]>[0])
+        : {
+            channel: t.channel,
+            thread_ts: t.threadTs,
+            text: fallbackText(ir),
+            blocks,
+          },
+    );
     return { id: res.ts as string, channel: t.channel, ts: res.ts };
   }
 
   async update(ref: MessageRef, ir: IRNode[]): Promise<void> {
     const channel = channelOf(ref);
-    await this.client.chat.update({
-      channel,
-      ts: ref.id,
-      blocks: renderBlockKit(ir),
-      text: fallbackText(ir),
-    });
+    const { blocks, accent } = renderSlackMessage(ir);
+    await this.client.chat.update(
+      accent
+        ? ({
+            channel,
+            ts: ref.id,
+            text: fallbackText(ir),
+            attachments: [{ color: accent, blocks }],
+          } as unknown as Parameters<WebClient["chat"]["update"]>[0])
+        : {
+            channel,
+            ts: ref.id,
+            text: fallbackText(ir),
+            blocks,
+          },
+    );
   }
 
   async stream(

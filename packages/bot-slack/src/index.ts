@@ -48,5 +48,5 @@ export { createRunRenderer } from "./event-renderer.js";
 
 export { decodeInteraction, conversationKeyOf } from "./interaction.js";
 
-export { renderBlockKit } from "./render/block-kit.js";
+export { renderBlockKit, renderSlackMessage } from "./render/block-kit.js";
 export { SLACK_LIMITS } from "./render/budget.js";

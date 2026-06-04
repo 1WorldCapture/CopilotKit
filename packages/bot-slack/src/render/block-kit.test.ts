@@ -1,6 +1,6 @@
 import { Header, Message, Section, renderToIR, type IRNode } from "@copilotkit/bot-ui";
 import { describe, expect, it } from "vitest";
-import { renderBlockKit } from "./block-kit.js";
+import { renderBlockKit, renderSlackMessage } from "./block-kit.js";
 
 describe("renderBlockKit", () => {
   it("flattens a message into header + section blocks (markdown → mrkdwn)", () => {
@@ -94,5 +94,37 @@ describe("renderBlockKit", () => {
         { type: "raw", props: { value: [{ type: "section", text: { type: "mrkdwn", text: "native" } }] } },
       ]),
     ).toEqual([{ type: "section", text: { type: "mrkdwn", text: "native" } }]);
+  });
+});
+
+describe("renderSlackMessage", () => {
+  it("extracts a top-level <Message accent> as the attachment color", () => {
+    expect(
+      renderSlackMessage([
+        {
+          type: "message",
+          props: {
+            accent: "#EB5757",
+            children: [
+              { type: "section", props: { children: [{ type: "text", props: { value: "hi" } }] } },
+            ],
+          },
+        },
+      ]),
+    ).toEqual({
+      blocks: [{ type: "section", text: { type: "mrkdwn", text: "hi" } }],
+      accent: "#EB5757",
+    });
+  });
+
+  it("returns no accent when there is no message wrapper", () => {
+    expect(
+      renderSlackMessage([
+        { type: "section", props: { children: [{ type: "text", props: { value: "hi" } }] } },
+      ]),
+    ).toEqual({
+      blocks: [{ type: "section", text: { type: "mrkdwn", text: "hi" } }],
+      accent: undefined,
+    });
   });
 });

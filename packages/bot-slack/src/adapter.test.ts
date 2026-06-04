@@ -55,6 +55,26 @@ describe("SlackAdapter.post", () => {
     expect((ref as { channel?: string }).channel).toBe("C1");
   });
 
+  it("wraps a <Message accent> in a colored attachment instead of top-level blocks", async () => {
+    const { adapter, chat } = makeAdapter();
+    await adapter.post({ channel: "C1" }, [
+      {
+        type: "message",
+        props: { accent: "#27AE60", children: [section("ok")] },
+      },
+    ]);
+
+    const arg = chat.postMessage.mock.calls[0]![0] as {
+      blocks?: unknown;
+      attachments?: Array<{ color: string; blocks: Array<{ type: string }> }>;
+    };
+    expect(arg.blocks).toBeUndefined();
+    expect(arg.attachments).toHaveLength(1);
+    expect(arg.attachments![0]!.color).toBe("#27AE60");
+    expect(arg.attachments![0]!.blocks).toHaveLength(1);
+    expect(arg.attachments![0]!.blocks[0]!.type).toBe("section");
+  });
+
   it("defaults fallback text to … when the IR has no text", async () => {
     const { adapter, chat } = makeAdapter();
     await adapter.post({ channel: "C1" }, [{ type: "divider", props: {} }]);

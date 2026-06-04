@@ -32,6 +32,17 @@ export function renderBlockKit(ir: IRNode[]): KnownBlock[] {
   return kept;
 }
 
+/** Render IR to Slack blocks, extracting a top-level <Message accent="#hex"> color for an attachment wrapper. */
+export function renderSlackMessage(ir: IRNode[]): { blocks: KnownBlock[]; accent?: string } {
+  const blocks = renderBlockKit(ir);
+  // Top-level single <Message accent="..."> → use its accent as the attachment color.
+  if (ir.length === 1 && ir[0] && ir[0].type === "message") {
+    const accent = (ir[0].props as { accent?: unknown }).accent;
+    if (typeof accent === "string" && accent.length > 0) return { blocks, accent };
+  }
+  return { blocks };
+}
+
 function overflowSignal(count: number): KnownBlock {
   return {
     type: "context",
