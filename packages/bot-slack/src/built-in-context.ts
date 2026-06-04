@@ -6,7 +6,10 @@
  *
  * Each entry is exported individually too so apps can cherry-pick.
  */
-import type { SlackContextEntry } from "./frontend-tools.js";
+import type { ContextEntry } from "@copilotkit/bot";
+
+/** Slack context entry — alias of `@copilotkit/bot`'s {@link ContextEntry}. */
+export type SlackContextEntry = ContextEntry;
 
 export const slackTaggingContext: SlackContextEntry = {
   description: "How to @-mention people on Slack — REQUIRED PROCEDURE",

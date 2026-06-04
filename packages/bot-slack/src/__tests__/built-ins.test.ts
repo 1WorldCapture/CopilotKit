@@ -10,7 +10,8 @@ import {
   slackFormattingContext,
   slackConversationModelContext,
 } from "../built-in-context.js";
-import type { FrontendToolContext } from "../frontend-tools.js";
+import type { SlackToolContext } from "../tool-context.js";
+import type { WebClient } from "@slack/web-api";
 
 const members = [
   {
@@ -53,8 +54,21 @@ const members = [
   },
 ];
 
+/**
+ * The handler's `ctx` parameter is `BotToolContext<SlackToolContext> &
+ * SlackToolContext`. The lookup handler only ever reads `ctx.client`, so the
+ * tests build a minimal Slack tool context and pass it through this alias —
+ * the cast keeps the call sites honest about which type the handler expects.
+ */
+type HandlerCtx = Parameters<typeof lookupSlackUserTool.handler>[1];
+
+/** Mock just the WebClient surface the handler touches (`users.list`). */
+function makeClient(listFn: ReturnType<typeof vi.fn>): WebClient {
+  return { users: { list: listFn } } as unknown as WebClient;
+}
+
 function makeCtx(): {
-  ctx: FrontendToolContext;
+  ctx: HandlerCtx;
   listFn: ReturnType<typeof vi.fn>;
 } {
   const listFn = vi.fn(async () => ({
@@ -62,15 +76,15 @@ function makeCtx(): {
     members,
     response_metadata: {},
   }));
-  const ctx = {
-    client: { users: { list: listFn } } as never,
+  const ctx: SlackToolContext = {
+    client: makeClient(listFn),
     channel: "C1",
     threadTs: "100.0",
     botUserId: "BOT01",
     conversationKey: "C1::100.0",
     postFile: async () => ({ ok: true }),
-  } satisfies FrontendToolContext;
-  return { ctx, listFn };
+  };
+  return { ctx: ctx as HandlerCtx, listFn };
 }
 
 describe("lookup_slack_user", () => {
@@ -147,21 +161,22 @@ describe("lookup_slack_user", () => {
   });
 
   it("returns found:false (with reason) if users.list throws", async () => {
-    const ctx = {
-      client: {
-        users: {
-          list: vi.fn(async () => {
-            throw new Error("rate limited");
-          }),
-        },
-      } as never,
+    const ctx: SlackToolContext = {
+      client: makeClient(
+        vi.fn(async () => {
+          throw new Error("rate limited");
+        }),
+      ),
       channel: "C1",
       botUserId: "BOT01",
       conversationKey: "C1::100.0",
       postFile: async () => ({ ok: true }),
-    } satisfies FrontendToolContext;
+    };
     const r = JSON.parse(
-      (await lookupSlackUserTool.handler({ query: "atai" }, ctx)) as string,
+      (await lookupSlackUserTool.handler(
+        { query: "atai" },
+        ctx as HandlerCtx,
+      )) as string,
     );
     expect(r.found).toBe(false);
     expect(r.reason).toContain("rate limited");

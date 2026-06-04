@@ -38,6 +38,8 @@ export type {
   FileDeliveryConfig,
 } from "./download-files.js";
 
-// TODO(W16): export built-in tools (lookup_slack_user) as BotTool once re-expressed
+export { lookupSlackUserTool, defaultSlackTools } from "./built-in-tools.js";
+export type { SlackToolContext, SlackBotTool } from "./tool-context.js";
+
 // TODO(W18): export createRunRenderer from event-renderer
 // TODO(W19): export slack() adapter + SlackToolContext

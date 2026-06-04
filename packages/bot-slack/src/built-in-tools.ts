@@ -5,7 +5,7 @@
  * `createSlackBridge`.
  */
 import { z } from "zod";
-import type { FrontendTool, FrontendToolContext } from "./frontend-tools.js";
+import type { SlackBotTool, SlackToolContext } from "./tool-context.js";
 
 interface SlackMember {
   id: string;
@@ -60,7 +60,7 @@ function toEntry(m: SlackMember): DirectoryEntry | undefined {
 }
 
 async function loadDirectory(
-  ctx: FrontendToolContext,
+  ctx: SlackToolContext,
 ): Promise<DirectoryEntry[]> {
   const now = Date.now();
   if (cached && now - cached.at < CACHE_TTL_MS) return cached.entries;
@@ -111,7 +111,7 @@ const lookupSchema = z.object({
     ),
 });
 
-export const lookupSlackUserTool: FrontendTool<typeof lookupSchema> = {
+export const lookupSlackUserTool: SlackBotTool<typeof lookupSchema> = {
   name: "lookup_slack_user",
   description:
     "Resolve a person to a Slack user ID so you can @-mention them. " +
@@ -155,6 +155,6 @@ export function _resetLookupCache(): void {
  *
  *     tools: [...defaultSlackTools, ...myAppTools],
  */
-export const defaultSlackTools: ReadonlyArray<FrontendTool> = [
+export const defaultSlackTools: ReadonlyArray<SlackBotTool> = [
   lookupSlackUserTool,
 ];
