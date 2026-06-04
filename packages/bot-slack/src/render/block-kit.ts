@@ -52,7 +52,7 @@ function renderNode(node: IRNode, out: KnownBlock[]): void {
     case "header": {
       out.push({
         type: "header",
-        text: { type: "plain_text", text: truncateText(collectText(node), 150) },
+        text: { type: "plain_text", text: truncateText(collectText(node), SLACK_LIMITS.headerText) },
       } as KnownBlock);
       return;
     }
@@ -122,6 +122,19 @@ function renderNode(node: IRNode, out: KnownBlock[]): void {
       out.push({ type: "divider" } as KnownBlock);
       return;
     }
+    case "input": {
+      out.push({
+        type: "input",
+        dispatch_action: true,
+        element: {
+          type: "plain_text_input",
+          action_id: truncateText(idFromHandler(props.onSubmit) ?? "input", SLACK_LIMITS.actionId),
+          multiline: !!props.multiline,
+        },
+        label: { type: "plain_text", text: truncateText(String(props.placeholder ?? " "), 150) },
+      } as KnownBlock);
+      return;
+    }
     case "text": {
       // Bare top-level text → a mrkdwn section.
       const value = String(props.value ?? "");
@@ -172,16 +185,16 @@ function renderActionElement(node: IRNode): object | null {
       return el;
     }
     case "select": {
-      const action_id = idFromHandler(props.onSelect);
+      const action_id = truncateText(idFromHandler(props.onSelect) ?? "select", SLACK_LIMITS.actionId);
       const options = (props.options as { label: string; value: unknown }[] | undefined) ?? [];
       const { items } = clampArray(options, SLACK_LIMITS.selectOptions);
       const el: Record<string, unknown> = {
         type: "static_select",
-        ...(action_id ? { action_id } : {}),
+        action_id,
         placeholder: { type: "plain_text", text: String(props.placeholder ?? " ") },
         options: items.map((o) => ({
-          text: { type: "plain_text", text: o.label },
-          value: String(o.value),
+          text: { type: "plain_text", text: truncateText(o.label, 75) },
+          value: truncateText(String(o.value), 150),
         })),
       };
       return el;

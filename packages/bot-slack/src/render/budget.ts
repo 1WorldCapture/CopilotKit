@@ -1,6 +1,7 @@
 export const SLACK_LIMITS = {
   blocksPerMessage: 50,
   sectionText: 3000,
+  headerText: 150,
   fieldsPerSection: 10,
   fieldText: 2000,
   actionsElements: 25,

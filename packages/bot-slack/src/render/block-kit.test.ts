@@ -59,6 +59,35 @@ describe("renderBlockKit", () => {
     expect(section.text.text.endsWith("…")).toBe(true);
   });
 
+  it("renders an input block with its stamped action_id", () => {
+    expect(
+      renderBlockKit([
+        { type: "input", props: { onSubmit: { id: "ck:in1" }, placeholder: "Name", multiline: false } },
+      ]),
+    ).toEqual([
+      {
+        type: "input",
+        dispatch_action: true,
+        element: { type: "plain_text_input", action_id: "ck:in1", multiline: false },
+        label: { type: "plain_text", text: "Name" },
+      },
+    ]);
+  });
+
+  it("gives a static_select a fallback action_id when onSelect is absent", () => {
+    const blocks = renderBlockKit([
+      {
+        type: "actions",
+        props: {
+          children: [{ type: "select", props: { options: [{ label: "A", value: "a" }] } }],
+        },
+      },
+    ]);
+    const select = (blocks[0] as { elements: { action_id: string }[] }).elements[0];
+    expect(select.action_id).toBe("select");
+    expect(select.action_id.length).toBeGreaterThan(0);
+  });
+
   it("passes raw native Block Kit through unchanged", () => {
     expect(
       renderBlockKit([
