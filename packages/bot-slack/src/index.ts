@@ -41,5 +41,12 @@ export type {
 export { lookupSlackUserTool, defaultSlackTools } from "./built-in-tools.js";
 export type { SlackToolContext, SlackBotTool } from "./tool-context.js";
 
-// TODO(W18): export createRunRenderer from event-renderer
-// TODO(W19): export slack() adapter + SlackToolContext
+export { slack, SlackAdapter } from "./adapter.js";
+export type { SlackAdapterOptions } from "./adapter.js";
+
+export { createRunRenderer } from "./event-renderer.js";
+
+export { decodeInteraction, conversationKeyOf } from "./interaction.js";
+
+export { renderBlockKit } from "./render/block-kit.js";
+export { SLACK_LIMITS } from "./render/budget.js";

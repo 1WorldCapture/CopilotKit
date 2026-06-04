@@ -88,4 +88,11 @@ export interface PlatformAdapter {
   decodeInteraction(raw: unknown): InteractionEvent | undefined;
   lookupUser(q: UserQuery): Promise<PlatformUser | undefined>;
   readonly conversationStore: ConversationStore;
+  /**
+   * Optional per-turn platform context merged into every tool's `ctx`.
+   * Called once per run with the conversation's reply target; the returned
+   * fields (e.g. a Slack `WebClient`, channel, postFile helper) are spread
+   * into the tool-call context so platform tools can act on the surface.
+   */
+  toolContext?(replyTarget: ReplyTarget): Record<string, unknown>;
 }

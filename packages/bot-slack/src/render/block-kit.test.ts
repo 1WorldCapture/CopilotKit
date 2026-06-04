@@ -83,7 +83,7 @@ describe("renderBlockKit", () => {
         },
       },
     ]);
-    const select = (blocks[0] as { elements: { action_id: string }[] }).elements[0];
+    const select = (blocks[0] as { elements: { action_id: string }[] }).elements[0]!;
     expect(select.action_id).toBe("select");
     expect(select.action_id.length).toBeGreaterThan(0);
   });

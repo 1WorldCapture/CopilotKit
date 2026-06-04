@@ -81,6 +81,10 @@ export function createBot(opts: CreateBotOptions): Bot {
       context,
       registerWaiter: (k, r) => waiters.set(k, r),
       interruptHandlers,
+      // Merge the adapter's per-turn platform context (e.g. Slack client +
+      // channel) into every tool-call ctx. Bound to this thread's reply
+      // target; the captured-call arg is unused by the adapter hook.
+      adapterToolContext: () => adapter.toolContext?.(replyTarget) ?? {},
     };
     return new Thread(deps);
   }
