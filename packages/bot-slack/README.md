@@ -1,236 +1,178 @@
-# @copilotkit/slack
+# @copilotkit/bot-slack
 
-A Slack frontend for **any AG-UI agent**. Connect a Slack workspace to
-a CopilotKit Runtime, LangGraph server, or any other AG-UI HTTP
-endpoint — Slack becomes another frontend the same way React /
-Angular / Vue are.
+The **Slack `PlatformAdapter`** for [`@copilotkit/bot`](../bot). It connects a
+Slack workspace to any AG-UI agent: ingress via Bolt (Socket Mode), egress as
+Block Kit rendered from the `@copilotkit/bot-ui` JSX vocabulary, plus text
+streaming, opaque-id interactions, and HITL.
 
-The bridge handles:
+You write your UI as JSX once (`@copilotkit/bot-ui`) and drive the bot with
+`@copilotkit/bot`; this package is the only one that talks to Slack.
 
-- **Text streaming** — `chat.update`-throttled in-place edits with
-  multi-message chunking, auto-close on dangling markdown brackets,
-  and Markdown → Slack mrkdwn translation (column-aligned tables, link
-  syntax, etc.).
-- **Frontend tools** — `FrontendTool<Schema>` declarations forwarded
-  to the agent via `runAgent({tools})`. `Schema` is any
-  [Standard Schema](https://standardschema.dev) (Zod 3.24+/v4, Valibot,
-  ArkType, …) → JSON Schema for the LLM; validated on the way back.
-  Ships with `lookup_slack_user` by default so the agent can
-  `<@USERID>`-mention people.
-- **Components** — `defineSlackComponent` is the Slack equivalent of
-  React's `useComponent`. The agent calls it like a tool; the bridge
-  renders Block Kit and posts.
-- **Human-in-the-loop** — `defineHumanInTheLoop` posts an interactive
-  picker, blocks the tool call on a click, and resumes with the
-  user's response. Resolution renders replace the picker in place via
-  Slack's `response_url`.
-- **LangGraph interrupts** — `defineInterruptHandler` captures
-  `on_interrupt` AG-UI custom events, renders a Block Kit picker,
-  awaits the click, and resumes the graph via
-  `runAgent({forwardedProps:{command:{resume}}})`.
-- **Interrupt-on-new-message** — a fresh user reply mid-stream aborts
-  the in-flight agent run, marks the partial reply
-  `_(interrupted)_`, and cancels any pending HITL/interrupt waits.
-- **Inbound files** — uploaded images, audio, video, and PDFs are
-  downloaded and delivered to the agent as AG-UI multimodal content
-  parts; CSV / JSON / text are decoded inline. The bridge is
-  transport-only — the model consumes whatever modalities it supports
-  (most read images and PDFs; far fewer accept audio/video). A tool can
-  post a file back out via `postFile`.
-- **No durable bridge state** — Slack itself is the source of truth.
-  Restarts rebuild conversation history from `conversations.replies`
-  on the next turn.
+## Install
+
+```sh
+pnpm add @copilotkit/bot-slack @copilotkit/bot @copilotkit/bot-ui
+```
+
+## Quickstart
+
+```ts
+import { createBot } from "@copilotkit/bot";
+import { slack, defaultSlackTools, defaultSlackContext } from "@copilotkit/bot-slack";
+
+const bot = createBot({
+  adapters: [
+    slack({
+      botToken: process.env.SLACK_BOT_TOKEN!, // xoxb-…
+      appToken: process.env.SLACK_APP_TOKEN!, // xapp-… (Socket Mode)
+    }),
+  ],
+  agent: (threadId) => makeAgent(threadId),
+  tools: [...defaultSlackTools, ...appTools], // lookup_slack_user + your tools
+  context: [...defaultSlackContext, ...appContext], // tagging/mrkdwn/thread guidance
+});
+
+bot.onMention(({ thread }) => thread.runAgent());
+
+await bot.start();
+```
+
+`slack(opts)` returns a `SlackAdapter`. By default it runs in **Socket Mode**
+(`socketMode: true`) — outbound WebSocket only, no public URL needed. HTTP
+mode (`socketMode: false`) needs `signingSecret` and a `port`. The Slack
+listener pre-filters ingress to the turns the bot should answer (@-mentions,
+replies in threads it owns, DMs), so a single `onMention` handler usually
+covers everything.
+
+### Required env
+
+| Var                | Token   | Purpose                                  |
+| ------------------ | ------- | ---------------------------------------- |
+| `SLACK_BOT_TOKEN`  | `xoxb-` | Bot token for the Web API.               |
+| `SLACK_APP_TOKEN`  | `xapp-` | App-level token for Socket Mode.         |
+
+## What it provides
+
+### JSX → Block Kit rendering
+
+`renderSlackMessage(ir)` / `renderBlockKit(ir)` translate the
+`@copilotkit/bot-ui` vocabulary to Block Kit: `Message → blocks`,
+`Header → header`, `Section → section (mrkdwn)`, `Markdown → markdownToMrkdwn`,
+`Field(s) → section.fields`, `Context → context`, `Actions → actions`,
+`Button → button (action_id = minted opaque id)`, `Select → static_select`,
+`Input → plain_text_input`, `Image → image`, `Divider → divider`.
+
+### Per-element budget
+
+Slack caps every element. The renderer degrades by truncate-with-overflow /
+clamp — it never silently drops content. Limits live in `SLACK_LIMITS`:
+
+| Limit               | Value | Element                       |
+| ------------------- | ----- | ----------------------------- |
+| `blocksPerMessage`  | 50    | blocks per message            |
+| `sectionText`       | 3000  | section body chars            |
+| `headerText`        | 150   | header chars                  |
+| `fieldsPerSection`  | 10    | fields per section            |
+| `fieldText`         | 2000  | field chars                   |
+| `actionsElements`   | 25    | controls per actions row      |
+| `contextElements`   | 10    | elements per context block    |
+| `buttonText`        | 75    | button label chars            |
+| `actionId`          | 255   | `action_id` chars             |
+| `buttonValue`       | 2000  | button value chars            |
+| `selectOptions`     | 100   | options per select            |
+
+### Colored cards
+
+`<Message accent="#RRGGBB">` renders as a Slack attachment with a colored
+left bar (Block Kit blocks have no native accent, so accented messages are
+posted as `attachments: [{ color, blocks }]`).
+
+### Streaming
+
+`thread.stream(...)` posts a placeholder and edits it in place via throttled
+`chat.update`, with multi-message chunking, mid-stream bracket auto-close, and
+Markdown → mrkdwn translation, so the in-flight message always renders.
+
+### Interactions (ack-first)
+
+Every Slack `block_actions` click is acked immediately (within the **≤3s**
+deadline, `ackDeadlineMs = 3000`), then `decodeInteraction` extracts the
+opaque minted id (`ck:…`), any tiny `bind()` value, and the message ref, and
+hands an `InteractionEvent` to the engine. The token carries only the opaque
+id — no props or secrets. Unrelated clicks decode to events the bot
+harmlessly ignores.
+
+### Human-in-the-loop
+
+Use `thread.awaitChoice(<Picker .../>)` to post an interactive message and
+block until a click resolves it; the resolved value is the clicked control's
+value. Agent interrupts (`on_interrupt`) are captured by the run renderer and
+dispatched to your `onInterrupt` handler, which posts a picker; the click
+resumes the agent via `thread.resume(value)`.
+
+### Sender-profile resolution & file download
+
+The adapter resolves each turn's Slack user id to a richer `PlatformUser`
+(`{ id, name?, email? }`), cached per id. Inbound files can be downloaded and
+delivered to the agent as multimodal content parts (`buildFileContentParts`);
+a tool can post a file back out via `ctx.postFile`.
+
+### Built-ins
+
+- `defaultSlackTools` — ships `lookup_slack_user` so the agent can resolve a
+  name/handle/email to a `<@USERID>` mention. Spread into `tools`.
+- `defaultSlackContext` — tagging procedure, Markdown-vs-mrkdwn guidance, and
+  the Slack thread/DM conversation model. Spread into `context`.
+
+## `SlackToolContext`
+
+When the agent calls one of your tools, the handler `ctx` carries the
+Slack-specific context the adapter merges in for the turn:
+
+```ts
+interface SlackToolContext {
+  client: WebClient;
+  channel: string;
+  threadTs?: string;
+  botUserId: string;
+  senderUserId?: string;
+  conversationKey?: string;
+  signal?: AbortSignal;
+  postFile?(args: {
+    bytes: Uint8Array;
+    filename: string;
+    title?: string;
+    altText?: string;
+  }): Promise<{ ok: boolean; fileId?: string; error?: string }>;
+}
+```
+
+Type your tools as `SlackBotTool` (= `BotTool` narrowed to `SlackToolContext`)
+to get this typed end-to-end.
 
 ## Running the demo
 
-This package is the **library**. A runnable end-to-end demo — a sample
-app wiring all of the above, a vendored AG-UI agent backend, and a
-live-Slack e2e harness — lives in
-[`examples/slack`](../../examples/slack). Start there to see the bridge
-working against a real workspace.
+This package is the **library**. A runnable end-to-end demo wiring all of the
+above against a real workspace lives in
+[`examples/slack`](../../examples/slack).
 
----
+## What's NOT in v1
 
-## SDK quickstart
+- Slash commands
+- Modals / true batched form submit
+- OAuth / multi-workspace install (single bot token only)
+- Durable (Redis/DB) `ActionStore` — in-memory only; actions expire on
+  restart
+- Proactive posting (bot replies only to turns it's part of)
+- Reactions
 
-### Defining a frontend tool
+## Exports
 
-`parameters` accepts any [Standard Schema](https://standardschema.dev)
-validator — Zod, Valibot, ArkType, etc. The examples below use Zod, but
-nothing in the SDK's public API is tied to it.
-
-```ts
-import { z } from "zod";
-import { type FrontendTool } from "@copilotkit/slack";
-
-const searchSchema = z.object({ q: z.string() });
-const searchTool: FrontendTool<typeof searchSchema> = {
-  name: "search_docs",
-  description: "Search the company knowledge base",
-  parameters: searchSchema,
-  async handler({ q }, ctx) {
-    return JSON.stringify(await callMyService(q));
-  },
-};
-```
-
-### Defining a render-only component
-
-```ts
-const flightCard = defineSlackComponent({
-  name: "flight_card",
-  description: "Render a flight option as a card",
-  props: z.object({ airline: z.string(), price: z.string() }),
-  render({ airline, price }) {
-    return [
-      {
-        type: "section",
-        text: { type: "mrkdwn", text: `*${airline}* ${price}` },
-      },
-    ];
-  },
-});
-```
-
-### Defining an interactive (human-in-the-loop) component
-
-```ts
-const confirmHitl = defineHumanInTheLoop({
-  name: "confirm",
-  description: "Ask the user to confirm before proceeding",
-  props: z.object({ question: z.string() }),
-  render(state, api) {
-    if (state.status === "pending") {
-      return [
-        { type: "section", text: { type: "mrkdwn", text: state.props.question } },
-        { type: "actions", elements: [
-          { type: "button", text: …, action_id: api.respond({ confirmed: true })  },
-          { type: "button", text: …, action_id: api.respond({ confirmed: false }) },
-        ]},
-      ];
-    }
-    if (state.status === "resolved") {
-      const v = state.value as { confirmed: boolean };
-      return [{ type: "section", text: { type: "mrkdwn", text: v.confirmed ? "✅" : "❌" } }];
-    }
-    if (state.status === "cancelled") return "delete";
-    return "noop";
-  },
-});
-```
-
-### Defining an interrupt handler
-
-```ts
-const pickerInterrupt = defineInterruptHandler({
-  name: "schedule_meeting_picker",
-  description: "Render a time-slot picker for the schedule_meeting interrupt",
-  payload: z.object({
-    topic: z.string(),
-    slots: z.array(z.object({ label: z.string(), iso: z.string() })),
-  }),
-  render(state, api) {
-    if (state.status === "pending") {
-      return state.payload.slots.map((s) => ({
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: { type: "plain_text", text: s.label },
-            action_id: api.respond({
-              chosen_time: s.iso,
-              chosen_label: s.label,
-            }),
-          },
-        ],
-      }));
-    }
-    // …resolved / cancelled / timeout
-    return "noop";
-  },
-});
-```
-
-### Wiring everything
-
-```ts
-import {
-  createSlackBridge,
-  defaultSlackTools,
-  defaultSlackContext,
-} from "@copilotkit/slack";
-
-createSlackBridge({
-  agentUrl: process.env.AGENT_URL!,
-  slackBotToken: process.env.SLACK_BOT_TOKEN!,
-  slackAppToken: process.env.SLACK_APP_TOKEN!,
-  tools: [...defaultSlackTools, searchTool], // includes lookup_slack_user
-  context: [...defaultSlackContext, ...appContext], // tagging/mrkdwn/thread guidance
-  components: [flightCard],
-  humanInTheLoopComponents: [confirmHitl],
-  interruptHandlers: [pickerInterrupt],
-  // showToolStatus: true   // opt in to `:wrench:/:white_check_mark:` status rows
-});
-```
-
-See [`examples/slack/app`](../../examples/slack/app) for a worked
-example wiring all of the above.
-
-## Deploying
-
-The bridge is a single long-lived Node process.
-
-- **No public URL needed (Socket Mode, the default).** It only makes
-  outbound HTTPS + a WebSocket to Slack, so it runs anywhere — a
-  container, a VM, a Fly/Render/Railway worker, a k8s `Deployment`. HTTP
-  mode (`socketMode: false`) instead needs a public endpoint and
-  `slackSigningSecret`.
-- **Stateless → restart-safe, single replica.** Slack is the source of
-  truth; the bridge keeps no durable storage and rebuilds conversation
-  context from Slack history on every turn. In-flight HITL/interrupt
-  waits live in memory, but a button click still recovers after a
-  restart because the resume value is baked into the button (see
-  [`ARCHITECTURE.md`](./ARCHITECTURE.md)). Running more than one replica
-  is possible but duplicates event handling — prefer a single instance.
-- **Secrets** — supply `slackBotToken` (`xoxb-`), `slackAppToken`
-  (`xapp-`, Socket Mode), optional `slackSigningSecret` (HTTP mode), and
-  any `agentHeaders` (agent auth) via your platform's secret store / env.
-  Never commit them.
-- **Rate limits** — Slack `429`s are retried automatically, honoring each
-  response's `Retry-After`; tune with `retryConfig`.
-- Run the **agent backend** as its own service (the AG-UI server
-  `AGENT_URL` points at). [`examples/slack`](../../examples/slack) ships
-  one (Next.js + LangGraph) with a `Dockerfile`.
-
-`AGENT_URL` can point at any AG-UI HTTP endpoint:
-
-```env
-AGENT_URL=https://your-deployment.example.com/api/copilotkit
-AGENT_AUTH_HEADER=Bearer your-token
-```
-
-## Troubleshooting
-
-- **Bot doesn't respond to @mentions** — confirm it's invited to the
-  channel; check the `app_mention` / `message.im` scopes and event
-  subscriptions in your manifest; verify `slackBotToken` / `slackAppToken`.
-- **`not_authed` / `invalid_auth`** — wrong or expired token, or the
-  `xapp-` token is missing the `connections:write` scope.
-- **Bot replies to itself / loops** — the bridge skips its own messages
-  using the bot user id it resolves at startup. If `auth.test` failed on
-  boot the guard is weaker — check the startup logs for
-  `[slack-bridge] auth.test failed`.
-- **Streaming reply stops updating mid-stream** — usually the WebClient
-  backing off a `429` (honoring `Retry-After`) or a genuinely failed
-  edit; look for `[message-stream] update failed` in the logs.
-- **An interrupt / HITL picker click does nothing** — the graph stays
-  paused when no handler matches the event name, or when the stored
-  payload fails schema validation. Check for
-  `[turn-runner] … failed validation` warnings.
-- **More logs** — set `logLevel: LogLevel.DEBUG` in `createSlackBridge`.
-
-## What's not here yet
-
-- **Modals / shortcuts / home tab** — Block Kit inside threads only.
-- **Multi-workspace install (OAuth)** — single-workspace bot token today;
-  the customer-workspace install/OAuth path is future work.
+`slack`, `SlackAdapter`, `SlackAdapterOptions`; `createRunRenderer`;
+`decodeInteraction`, `conversationKeyOf`; `renderBlockKit`,
+`renderSlackMessage`, `SLACK_LIMITS`; `defaultSlackTools`,
+`lookupSlackUserTool`, `defaultSlackContext` (+ the individual context
+entries); `SlackToolContext`, `SlackBotTool`; `markdownToMrkdwn`; and the
+preserved mechanics (`SlackConversationStore`, `MessageStream`,
+`ChunkedMessageStream`, `attachSlackListener`, `SanitizingHttpAgent`,
+`buildFileContentParts`, `autoCloseOpenMarkdown`, and supporting types).
