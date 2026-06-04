@@ -1,17 +1,12 @@
 /**
- * App-specific human-in-the-loop components — interactive Block Kit
- * cards the agent can render to ask the user a structured question and
- * wait for the answer.
+ * App-specific human-in-the-loop components — interactive Block Kit cards the
+ * agent can render to ask the user a structured question and wait for the
+ * answer.
  *
- * Add new HITL components here, re-export them through `appHitl`, then
- * wire the array into `createSlackBridge({humanInTheLoopComponents:
- * appHitl})` in `app/index.ts`.
+ * `confirm_write` is now a JSX component (`ConfirmWrite`) used as a BLOCKING
+ * FRONTEND TOOL: a tool handler calls `await thread.awaitChoice(<ConfirmWrite
+ * .../>)` (wired in a later wave), which posts the picker and resolves to the
+ * clicked button's `value`. Add new HITL components here and re-export them.
  */
-import { confirmWriteHitl } from "./confirm-write.js";
-
-// Infer the array type from the elements — preserves each handler's
-// per-action payload typing all the way to the SDK's bridge config,
-// which uses `HumanInTheLoop<any, any>` so the assignment widens cleanly.
-export const appHitl = [confirmWriteHitl];
-
-export { confirmWriteHitl };
+export { ConfirmWrite } from "./confirm-write.js";
+export type { ConfirmWriteProps } from "./confirm-write.js";
