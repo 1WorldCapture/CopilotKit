@@ -1,18 +1,16 @@
 /**
- * App-specific Slack components — agent-renderable Block Kit cards.
+ * App-specific render components — agent-renderable Block Kit cards authored
+ * with the `@copilotkit/bot-ui` JSX vocabulary.
  *
- * Add new components here, re-export through `appComponents`, then wire
- * the array into `createSlackBridge({components: appComponents})`.
+ * Each component is a plain `ComponentFn` returning a `<Message>` tree; its
+ * exported zod prop schema doubles as the render-tool input schema. Render a
+ * component with `renderSlackMessage(renderToIR(<IssueCard {...props} />))`.
  */
-import { issueListComponent } from "./issue-list.js";
-import { issueCardComponent } from "./issue-card.js";
-import { pageListComponent } from "./page-list.js";
-import type { SlackComponent } from "@copilotkit/slack";
+export { IssueCard, issueCardSchema } from "./issue-card.js";
+export type { IssueCardProps } from "./issue-card.js";
 
-export const appComponents: ReadonlyArray<SlackComponent> = [
-  issueListComponent,
-  issueCardComponent,
-  pageListComponent,
-];
+export { IssueList, issueListSchema } from "./issue-list.js";
+export type { IssueListProps } from "./issue-list.js";
 
-export { issueListComponent, issueCardComponent, pageListComponent };
+export { PageList, pageListSchema } from "./page-list.js";
+export type { PageListProps } from "./page-list.js";
