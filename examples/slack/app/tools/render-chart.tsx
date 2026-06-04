@@ -2,9 +2,12 @@
  * `render_chart` — the agent emits a Chart.js config; we render it to a PNG
  * locally (headless Chromium) and deliver it to the thread via the SDK's
  * `ctx.postFile`. Slack shows the image inline. This is the "upload a CSV →
- * get a chart" payoff: the agent parses the data, then calls this.
+ * get a chart" payoff: the agent parses the data, then calls this. After the
+ * upload we also post a small JSX caption card (`<Context>`) so the tool
+ * doubles as a render-tool demo.
  */
 import { z } from "zod";
+import { Context } from "@copilotkit/bot-ui";
 import type { BotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderChart } from "../render/chart.js";
@@ -98,9 +101,18 @@ export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
         title: title ?? "Chart",
         altText: title ?? "Generated chart",
       });
+      // After the image lands, post a small JSX caption card.
+      let caption = false;
+      if (res.ok) {
+        await ctx.thread.post(
+          <Context>{`:bar_chart:  *${title ?? "Chart"}* — rendered as an image above.`}</Context>,
+        );
+        caption = true;
+      }
       return JSON.stringify({
         ok: res.ok,
         posted: res.ok,
+        ...(caption ? { caption: true } : {}),
         ...(res.error ? { error: res.error } : {}),
       });
     } catch (e) {

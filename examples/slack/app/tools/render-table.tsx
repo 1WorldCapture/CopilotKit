@@ -4,13 +4,14 @@
  * issues with several fields, metrics parsed from an uploaded CSV, side-by-side
  * comparisons — anything where a chart isn't the right shape.
  *
- * The Table block is newer Block Kit (GA in `chat.postMessage`, but not yet in
- * `@slack/types`), so it's built as a plain object and cast. If the workspace
- * rejects it, we fall back to a column-aligned monospace (code-fenced) table so
- * the data always lands — the same look the bridge gives GFM tables in prose.
+ * Authored as JSX over `@copilotkit/bot-ui`'s `<Table>/<Row>/<Cell>` vocabulary
+ * and posted via `thread.post`. If the workspace rejects the native Table block,
+ * we fall back to a column-aligned monospace (code-fenced) table via the raw
+ * escape hatch so the data always lands — the same look the bridge gives GFM
+ * tables in prose.
  */
 import { z } from "zod";
-import type { KnownBlock } from "@slack/types";
+import { Message, Header, Table, Row, Cell } from "@copilotkit/bot-ui";
 import type { BotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 
@@ -49,20 +50,8 @@ type Column = z.infer<typeof schema>["columns"][number];
 const MAX_COLUMNS = 20;
 const MAX_DATA_ROWS = 99;
 
-interface RawTextCell {
-  type: "raw_text";
-  text: string;
-}
-interface TableBlock {
-  type: "table";
-  rows: RawTextCell[][];
-  column_settings?: Array<{ align?: "left" | "center" | "right" }>;
-}
-
-const cell = (text: string): RawTextCell => ({ type: "raw_text", text });
-
 /** Clamp to Slack's limits, recording what was dropped. */
-function clamp(
+export function clamp(
   columns: Column[],
   rows: string[][],
 ): { cols: Column[]; dataRows: string[][]; notes: string[] } {
@@ -78,23 +67,6 @@ function clamp(
     notes.push(`only the first ${MAX_DATA_ROWS} of ${rows.length} rows shown`);
   }
   return { cols, dataRows, notes };
-}
-
-/** Build the native Table block: header row first, then the data rows. */
-export function buildTableBlock(
-  cols: Column[],
-  dataRows: string[][],
-): TableBlock {
-  const headerRow = cols.map((c) => cell(c.header));
-  const bodyRows = dataRows.map((r) =>
-    cols.map((_, i) => cell(String(r[i] ?? ""))),
-  );
-  const block: TableBlock = { type: "table", rows: [headerRow, ...bodyRows] };
-  const settings = cols.map((c) => (c.align ? { align: c.align } : {}));
-  if (settings.some((s) => Object.keys(s).length > 0)) {
-    block.column_settings = settings;
-  }
-  return block;
 }
 
 /**
@@ -126,48 +98,51 @@ export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
     "several fields, metrics from a CSV, comparisons — when a chart isn't the " +
     "right shape. Max 20 columns and 100 rows.",
   parameters: schema,
-  async handler({ title, columns, rows }, ctx) {
+  async handler({ title, columns, rows }, { thread }) {
     const { cols, dataRows, notes } = clamp(columns, rows);
     const ack = (extra: Record<string, unknown>) =>
       JSON.stringify({
+        ok: true,
         rendered: "table",
         ...(notes.length ? { notes } : {}),
         ...extra,
       });
 
-    const heading: KnownBlock[] = title
-      ? [{ type: "header", text: { type: "plain_text", text: title } }]
-      : [];
-    const tableBlock = buildTableBlock(cols, dataRows);
+    const table = (
+      <Message>
+        {title ? <Header>{title}</Header> : null}
+        <Table columns={cols}>
+          {dataRows.map((r) => (
+            <Row>
+              {cols.map((_, i) => (
+                <Cell>{String(r[i] ?? "")}</Cell>
+              ))}
+            </Row>
+          ))}
+        </Table>
+      </Message>
+    );
 
     try {
-      const res = (await ctx.client.chat.postMessage({
-        channel: ctx.channel,
-        thread_ts: ctx.threadTs,
-        text: title ?? "Table",
-        blocks: [...heading, tableBlock as unknown as KnownBlock],
-      })) as { ts?: string };
-      return ack({ ok: true, posted: true, messageTs: res.ts });
-    } catch (err) {
-      // Native Table block not accepted (older workspace / unsupported) —
-      // post the same data as a monospace code-fenced table so it still lands.
-      try {
-        const res = (await ctx.client.chat.postMessage({
-          channel: ctx.channel,
-          thread_ts: ctx.threadTs,
-          text:
-            (title ? `*${title}*\n` : "") + toMonospaceTable(cols, dataRows),
-        })) as { ts?: string };
-        return ack({
-          ok: true,
-          posted: true,
-          fellBackToMonospace: true,
-          reason: (err as Error).message,
-          messageTs: res.ts,
-        });
-      } catch (err2) {
-        return ack({ ok: false, error: (err2 as Error).message });
-      }
+      await thread.post(table);
+      return ack({});
+    } catch {
+      // Native Table block not accepted (older workspace / unsupported) — post
+      // the same data as a monospace code-fenced table via the raw escape hatch
+      // so it still lands.
+      const mono = toMonospaceTable(cols, dataRows);
+      await thread.post({
+        raw: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: (title ? `*${title}*\n` : "") + mono,
+            },
+          },
+        ],
+      });
+      return ack({ fellBackToMonospace: true });
     }
   },
 };

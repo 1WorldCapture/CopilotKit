@@ -13,6 +13,11 @@ import { renderChartTool } from "./render-chart.js";
 import { renderDiagramTool } from "./render-diagram.js";
 import { renderTableTool } from "./render-table.js";
 import { issueCardTool, issueListTool, pageListTool } from "./render-tools.js";
+import {
+  showIncidentTool,
+  showStatusTool,
+  showLinksTool,
+} from "./showcase-tools.js";
 import { confirmWriteTool } from "../human-in-the-loop/index.js";
 import type { AnyBotTool } from "@copilotkit/bot";
 
@@ -32,6 +37,9 @@ export const appTools: AnyBotTool[] = [
   issueCardTool,
   issueListTool,
   pageListTool,
+  showIncidentTool,
+  showStatusTool,
+  showLinksTool,
   confirmWriteTool,
 ];
 
@@ -43,5 +51,8 @@ export {
   issueCardTool,
   issueListTool,
   pageListTool,
+  showIncidentTool,
+  showStatusTool,
+  showLinksTool,
   confirmWriteTool,
 };

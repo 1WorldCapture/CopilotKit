@@ -2,9 +2,12 @@
  * `render_diagram` — the agent emits Mermaid source; we render it to a PNG
  * locally (headless Chromium) and deliver it to the thread via `ctx.postFile`.
  * On invalid Mermaid the tool returns the parser error so the agent can fix
- * and retry rather than posting a broken image.
+ * and retry rather than posting a broken image. After a successful upload we
+ * also post a small JSX caption card (`<Context>`) so the tool doubles as a
+ * render-tool demo.
  */
 import { z } from "zod";
+import { Context } from "@copilotkit/bot-ui";
 import type { BotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderDiagram } from "../render/diagram.js";
@@ -50,9 +53,18 @@ export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
         title: title ?? "Diagram",
         altText: title ?? "Generated diagram",
       });
+      // After the image lands, post a small JSX caption card.
+      let caption = false;
+      if (res.ok) {
+        await ctx.thread.post(
+          <Context>{`:triangular_ruler:  *${title ?? "Diagram"}* — rendered as an image above.`}</Context>,
+        );
+        caption = true;
+      }
       return JSON.stringify({
         ok: res.ok,
         posted: res.ok,
+        ...(caption ? { caption: true } : {}),
         ...(res.error ? { error: res.error } : {}),
       });
     } catch (e) {

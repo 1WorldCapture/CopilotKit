@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
+import { renderToIR } from "@copilotkit/bot-ui";
+import { renderSlackMessage } from "@copilotkit/bot-slack";
 
 // Mock the local renderers so no headless browser is launched.
 const renderChart = vi.fn(async () => Buffer.from("CHARTPNG"));
@@ -15,6 +16,13 @@ type HandlerCtx = Parameters<typeof renderChartTool.handler>[1];
 
 function makeCtx() {
   const postFile = vi.fn(async () => ({ ok: true, fileId: "F1" }));
+  const posts: unknown[] = [];
+  const thread = {
+    post: vi.fn(async (ui: unknown) => {
+      posts.push(ui);
+      return { id: "m1" };
+    }),
+  };
   const ctx = {
     client: {} as never,
     channel: "C1",
@@ -22,8 +30,9 @@ function makeCtx() {
     botUserId: "BOT",
     conversationKey: "C1::100.0",
     postFile,
-  } satisfies SlackToolContext as unknown as HandlerCtx;
-  return { ctx, postFile };
+    thread,
+  } as unknown as HandlerCtx;
+  return { ctx, postFile, thread, posts };
 }
 
 beforeEach(() => {
@@ -33,7 +42,7 @@ beforeEach(() => {
 
 describe("render_chart tool", () => {
   it("renders a config object and posts the PNG", async () => {
-    const { ctx, postFile } = makeCtx();
+    const { ctx, postFile, posts } = makeCtx();
     const out = JSON.parse(
       (await renderChartTool.handler(
         {
@@ -55,7 +64,12 @@ describe("render_chart tool", () => {
         title: "Revenue Q2",
       }),
     );
-    expect(out).toMatchObject({ ok: true, posted: true });
+    expect(out).toMatchObject({ ok: true, posted: true, caption: true });
+    // The caption card was posted after the upload.
+    expect(posts).toHaveLength(1);
+    const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
+    expect(JSON.stringify(blocks)).toContain(":bar_chart:");
+    expect(JSON.stringify(blocks)).toContain("Revenue Q2");
   });
 
   it("returns ok:false (not a throw) when rendering fails", async () => {
@@ -82,7 +96,7 @@ describe("render_chart tool", () => {
 
 describe("render_diagram tool", () => {
   it("renders Mermaid and posts the PNG", async () => {
-    const { ctx, postFile } = makeCtx();
+    const { ctx, postFile, posts } = makeCtx();
     const out = JSON.parse(
       (await renderDiagramTool.handler(
         { title: "Flow", mermaid: "flowchart TD\n A-->B" },
@@ -93,7 +107,11 @@ describe("render_diagram tool", () => {
     expect(postFile).toHaveBeenCalledWith(
       expect.objectContaining({ filename: "flow.png" }),
     );
-    expect(out).toMatchObject({ ok: true, posted: true });
+    expect(out).toMatchObject({ ok: true, posted: true, caption: true });
+    expect(posts).toHaveLength(1);
+    const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
+    expect(JSON.stringify(blocks)).toContain(":triangular_ruler:");
+    expect(JSON.stringify(blocks)).toContain("Flow");
   });
 
   it("surfaces a render error for the agent to repair", async () => {
