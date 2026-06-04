@@ -2,7 +2,7 @@
  * Slack-platform-universal frontend tools — tools every Slack bot
  * benefits from, regardless of what the bot does. Apps spread
  * `defaultSlackTools` into the `tools:` config they pass to
- * `createSlackBridge`.
+ * `createBot`.
  */
 import { z } from "zod";
 import type { SlackBotTool, SlackToolContext } from "./tool-context.js";
@@ -151,7 +151,7 @@ export function _resetLookupCache(): void {
 
 /**
  * The flat list of tools the SDK ships. Spread into your
- * `createSlackBridge({tools: …})`:
+ * `createBot({tools: …})`:
  *
  *     tools: [...defaultSlackTools, ...myAppTools],
  */

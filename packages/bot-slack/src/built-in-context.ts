@@ -2,7 +2,7 @@
  * Slack-platform-universal context entries — knowledge the LLM needs
  * about Slack itself (tagging procedure, mrkdwn vs Markdown, thread
  * model). Apps spread `defaultSlackContext` into the `context:` config
- * they pass to `createSlackBridge`.
+ * they pass to `createBot`.
  *
  * Each entry is exported individually too so apps can cherry-pick.
  */
@@ -70,7 +70,7 @@ export const slackConversationModelContext: SlackContextEntry = {
 
 /**
  * The default context entries the SDK ships. Spread into your
- * `createSlackBridge({context: …})`:
+ * `createBot({context: …})`:
  *
  *     context: [...defaultSlackContext, ...myAppContext],
  */
