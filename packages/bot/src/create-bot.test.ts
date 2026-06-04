@@ -87,6 +87,42 @@ describe("createBot", () => {
     expect(clicked).toBe(true);
   });
 
+  it("merges per-turn runAgent context with the bot-level context", async () => {
+    const fake = new FakeAdapter();
+    const agent = new FakeAgent();
+    // Capture the context/tools passed to the agent's first runAgent call.
+    let seenContext: unknown;
+    let seenTools: unknown;
+    const origRunAgent = agent.runAgent.bind(agent);
+    agent.runAgent = async (parameters, subscriber) => {
+      if (seenContext === undefined) {
+        seenContext = (parameters as { context?: unknown } | undefined)?.context;
+        seenTools = (parameters as { tools?: unknown } | undefined)?.tools;
+      }
+      return origRunAgent(parameters, subscriber);
+    };
+
+    const bot = createBot({
+      adapters: [fake],
+      agent: () => agent,
+      context: [{ description: "bot-level", value: "always here" }],
+    });
+
+    bot.onMention(async ({ thread }) => {
+      await thread.runAgent({ context: [{ description: "who", value: "user U1" }] });
+    });
+
+    await bot.start();
+    fake.emitTurn({ userText: "go", conversationKey: "c1" });
+    await tick();
+
+    expect(seenContext).toEqual([
+      { description: "bot-level", value: "always here" },
+      { description: "who", value: "user U1" },
+    ]);
+    expect(seenTools).toEqual([]);
+  });
+
   it("resolves awaitChoice when a matching interaction arrives", async () => {
     const fake = new FakeAdapter();
     const agent = new FakeAgent();

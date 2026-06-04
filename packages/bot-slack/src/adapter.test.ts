@@ -153,6 +153,44 @@ describe("SlackAdapter.capabilities / ackDeadlineMs", () => {
   });
 });
 
+describe("SlackAdapter.resolveUser", () => {
+  it("resolves a sender id to a richer PlatformUser (name + email) and caches it", async () => {
+    const { adapter } = makeAdapter();
+    const info = vi.fn(async (_arg: { user: string }) => ({
+      user: {
+        id: "U1",
+        name: "ana",
+        real_name: "Ana Smith",
+        profile: { real_name: "Ana Smith", email: "ana@example.com" },
+      },
+    }));
+    (adapter as unknown as { client: { users: unknown } }).client = {
+      users: { info },
+    };
+
+    const u = await adapter.resolveUser("U1");
+    expect(u).toEqual({ id: "U1", name: "Ana Smith", email: "ana@example.com" });
+
+    // Second call is served from cache (no extra users.info call).
+    const u2 = await adapter.resolveUser("U1");
+    expect(u2).toEqual(u);
+    expect(info).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to a bare { id } when users.info fails", async () => {
+    const { adapter } = makeAdapter();
+    const info = vi.fn(async () => {
+      throw new Error("not_found");
+    });
+    (adapter as unknown as { client: { users: unknown } }).client = {
+      users: { info },
+    };
+
+    const u = await adapter.resolveUser("U2");
+    expect(u).toEqual({ id: "U2" });
+  });
+});
+
 describe("SlackAdapter action wiring", () => {
   it("decodes a captured block_actions body and forwards to sink.onInteraction", async () => {
     const { adapter } = makeAdapter();

@@ -69,5 +69,11 @@ export function decodeInteraction(raw: unknown): InteractionEvent | undefined {
     ? { id: body.user.id, name: body.user.name ?? body.user.username }
     : undefined;
 
-  return { id: action.action_id, conversationKey, replyTarget, value, user };
+  // The picker message's ts: an onClick `thread.update(message.ref, …)`
+  // targets this message in place (the adapter's `update` reads `channel`
+  // off the ref).
+  const messageTs = body.message?.ts ?? body.container?.message_ts;
+  const messageRef = messageTs ? { id: messageTs, channel: channelId } : undefined;
+
+  return { id: action.action_id, conversationKey, replyTarget, value, user, messageRef };
 }

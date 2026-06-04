@@ -48,6 +48,8 @@ export interface InteractionEvent {
   replyTarget: ReplyTarget;
   value?: unknown;
   user?: PlatformUser;
+  /** The message the interaction occurred on (the picker), so handlers can update it in place. */
+  messageRef?: MessageRef;
 }
 
 export interface IngressSink {

@@ -62,6 +62,8 @@ export class SlackAdapter implements PlatformAdapter {
   botUserId = "";
   private readonly store: SlackConversationStore;
   private sink: IngressSink | undefined;
+  /** Per-id cache for sender-profile resolution (repeat turns are cheap). */
+  private readonly userCache = new Map<string, PlatformUser>();
 
   constructor(private readonly opts: SlackAdapterOptions) {
     this.app = new App({
@@ -92,12 +94,14 @@ export class SlackAdapter implements PlatformAdapter {
       app: this.app,
       store: this.store,
       botUserId: this.botUserId,
-      onTurn: (turn) => {
-        void sink.onTurn({
+      onTurn: async (turn) => {
+        await sink.onTurn({
           conversationKey: conversationKeyOf(turn.conversation),
           replyTarget: turn.replyTarget,
           userText: turn.userText,
-          user: turn.senderUserId ? { id: turn.senderUserId } : undefined,
+          user: turn.senderUserId
+            ? await this.resolveUser(turn.senderUserId)
+            : undefined,
           platform: "slack",
         });
       },
@@ -262,6 +266,39 @@ export class SlackAdapter implements PlatformAdapter {
       return undefined;
     }
     return undefined;
+  }
+
+  /**
+   * Resolve a Slack user id to a richer `PlatformUser` (name + email) for each
+   * turn, cached by id so repeat turns in the same conversation are cheap.
+   * Tolerates lookup failure by falling back to a bare `{ id }`.
+   */
+  async resolveUser(userId: string): Promise<PlatformUser> {
+    const cached = this.userCache.get(userId);
+    if (cached) return cached;
+    let user: PlatformUser = { id: userId };
+    try {
+      const r = (await this.client.users.info({ user: userId })) as {
+        user?: {
+          id?: string;
+          name?: string;
+          real_name?: string;
+          profile?: { real_name?: string; display_name?: string; email?: string };
+        };
+      };
+      const u = r.user;
+      if (u?.id) {
+        user = {
+          id: u.id,
+          name: u.real_name ?? u.profile?.real_name ?? u.profile?.display_name ?? u.name,
+          email: u.profile?.email,
+        };
+      }
+    } catch {
+      // Fall back to the bare id on any lookup failure.
+    }
+    this.userCache.set(userId, user);
+    return user;
   }
 
   get conversationStore(): ConversationStore {

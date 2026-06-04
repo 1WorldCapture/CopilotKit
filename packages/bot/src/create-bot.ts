@@ -111,7 +111,7 @@ export function createBot(opts: CreateBotOptions): Bot {
         const user = evt.user ?? { id: "" };
         const ctx: InteractionContext = {
           thread,
-          message: { text: "", user, ref: { id: "" }, platform: adapter.platform },
+          message: { text: "", user, ref: evt.messageRef ?? { id: "" }, platform: adapter.platform },
           action: { id: evt.id, value: evt.value },
           values: {},
           user,

@@ -2,6 +2,7 @@ import type { PlatformAdapter, ReplyTarget } from "./platform-adapter.js";
 import type { ActionRegistry } from "./action-registry.js";
 import type { Renderable, MessageRef, Thread as ThreadInterface } from "@copilotkit/bot-ui";
 import { runAgentLoop } from "./run-loop.js";
+import { toAgentToolDescriptors } from "./tools.js";
 import type { BotTool, ContextEntry, AgentToolDescriptor } from "./tools.js";
 import type { AbstractAgent } from "@ag-ui/client";
 import type { CapturedToolCall } from "./platform-adapter.js";
@@ -65,27 +66,47 @@ export class Thread implements ThreadInterface {
     return p;
   }
 
-  async runAgent(_input?: unknown): Promise<MessageRef | undefined> {
-    return this.run(undefined);
+  async runAgent(input?: {
+    context?: ContextEntry[];
+    tools?: BotTool[];
+  }): Promise<MessageRef | undefined> {
+    return this.run(undefined, input);
   }
 
   async resume(value: unknown): Promise<MessageRef | undefined> {
     return this.run({ resume: value });
   }
 
-  private async run(initialResume?: { resume: unknown }): Promise<MessageRef | undefined> {
+  private async run(
+    initialResume?: { resume: unknown },
+    extra?: { context?: ContextEntry[]; tools?: BotTool[] },
+  ): Promise<MessageRef | undefined> {
     const session = await this.deps.adapter.conversationStore.getOrCreate(
       this.deps.conversationKey,
       this.deps.replyTarget,
       this.deps.agentFactory,
     );
     const renderer = this.deps.adapter.createRunRenderer(this.deps.replyTarget);
+
+    // Merge per-run context/tools (this run only) on top of the bot-level deps.
+    const extraTools = extra?.tools ?? [];
+    let tools = this.deps.tools;
+    let toolDescriptors = this.deps.toolDescriptors;
+    if (extraTools.length > 0) {
+      tools = new Map(this.deps.tools);
+      for (const t of extraTools) tools.set(t.name, t);
+      toolDescriptors = [...this.deps.toolDescriptors, ...toAgentToolDescriptors(extraTools)];
+    }
+    const context = extra?.context?.length
+      ? [...this.deps.context, ...extra.context]
+      : this.deps.context;
+
     await runAgentLoop({
       agent: session.agent,
       renderer,
-      tools: this.deps.tools,
-      toolDescriptors: this.deps.toolDescriptors,
-      context: this.deps.context,
+      tools,
+      toolDescriptors,
+      context,
       makeToolCtx: (call) => ({
         thread: this,
         platform: this.platform,

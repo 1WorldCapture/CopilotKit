@@ -24,6 +24,7 @@ describe("decodeInteraction", () => {
     expect(evt!.conversationKey).toBe("C1::100.0");
     expect(evt!.replyTarget).toEqual({ channel: "C1", threadTs: "100.0" });
     expect(evt!.user).toEqual({ id: "U1", name: "Ana" });
+    expect(evt!.messageRef).toEqual({ id: "111.1", channel: "C1" });
   });
 
   it("uses DM_SCOPE and a flat replyTarget for DM channels", () => {
