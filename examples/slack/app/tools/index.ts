@@ -12,6 +12,7 @@ import { readThreadTool } from "./read-thread.js";
 import { renderChartTool } from "./render-chart.js";
 import { renderDiagramTool } from "./render-diagram.js";
 import { renderTableTool } from "./render-table.js";
+import { issueCardTool, issueListTool, pageListTool } from "./render-tools.js";
 import type { FrontendTool } from "@copilotkit/slack";
 
 export const appTools: ReadonlyArray<FrontendTool> = [
@@ -19,6 +20,17 @@ export const appTools: ReadonlyArray<FrontendTool> = [
   renderChartTool,
   renderDiagramTool,
   renderTableTool,
+  issueCardTool,
+  issueListTool,
+  pageListTool,
 ];
 
-export { readThreadTool, renderChartTool, renderDiagramTool, renderTableTool };
+export {
+  readThreadTool,
+  renderChartTool,
+  renderDiagramTool,
+  renderTableTool,
+  issueCardTool,
+  issueListTool,
+  pageListTool,
+};
