@@ -91,19 +91,34 @@ the bot when the agent calls it. The handler `ctx` carries the `thread`, so a
 tool can render JSX (`ctx.thread.post(<Card .../>)`) or run the agent further.
 
 ```ts
-interface BotTool<Schema extends ObjectSchema = ObjectSchema, Extra = Record<string, unknown>> {
+interface BotTool<Schema extends ObjectSchema = ObjectSchema> {
   name: string;
   description: string;
   parameters: Schema; // any Standard Schema (Zod/Valibot/ArkType/…)
-  handler(args, ctx: BotToolContext<Extra> & Extra): Promise<unknown> | unknown;
+  handler(args, ctx: BotToolContext): Promise<unknown> | unknown;
 }
+```
+
+Define one with the non-curried `defineBotTool`, which infers the arg types
+from `parameters`:
+
+```ts
+defineBotTool({
+  name: "read_thread",
+  description: "Read the messages in the current conversation.",
+  parameters: z.object({}),
+  async handler(_args, { thread }) {
+    return await thread.getMessages();
+  },
+});
 ```
 
 `parameters` (a Standard Schema) is converted to JSON Schema for the LLM and
 validated on the way back. `BotToolContext` is `{ thread, message?, user?,
-signal?, platform }`; an adapter contributes `Extra` (its
-`PlatformToolContext`) for the turn. `AnyBotTool` is the loosely-typed alias
-used when collecting tools from multiple adapters.
+signal?, platform }` — a single shared type with no per-adapter generic.
+Platform-specific power is reached only through capability-gated `thread`
+methods (e.g. `thread.getMessages()`, `thread.lookupUser(query)`,
+`thread.postFile(...)`), so a tool stays portable across surfaces.
 
 A `ContextEntry` is `{ description: string; value: string }` — knowledge
 folded into the agent's system context on each `runAgent`.
@@ -139,10 +154,10 @@ egress through your `post` / `update` / `stream` / `delete` (which receive
 into, plus accessors for captured tool calls and interrupts that the run-loop
 reads after each `runAgent`), `decodeInteraction(raw)` (native event → opaque
 `InteractionEvent`), `lookupUser`, a `conversationStore`
-(`getOrCreate` → `AgentSession`), the surface `capabilities` /
-`ackDeadlineMs`, and an optional `toolContext(replyTarget)` whose fields are
-merged into every tool-call `ctx`. See `@copilotkit/bot-slack` for a complete
-implementation.
+(`getOrCreate` → `AgentSession`), and the surface `capabilities` /
+`ackDeadlineMs`. Optional capability methods like `getMessages(target)` and
+`postFile(target, args)` back the matching `thread` methods when the surface
+supports them. See `@copilotkit/bot-slack` for a complete implementation.
 
 ## Exports
 
@@ -151,8 +166,8 @@ implementation.
 `IncomingTurn`, `InteractionEvent`, `SurfaceCapabilities`, `ReplyTarget`,
 `ConversationStore`, `AgentSession`, `CapturedToolCall`, `CapturedInterrupt`,
 `UserQuery`); `ActionStore` / `InMemoryActionStore` / `ActionSnapshot` /
-`ActionRegistry` / `ActionExpiredError`; `BotTool` / `AnyBotTool` /
-`BotToolContext` / `PlatformToolContext` / `ContextEntry` /
+`ActionRegistry` / `ActionExpiredError`; `BotTool` / `BotToolContext` /
+`defineBotTool` / `ContextEntry` /
 `AgentToolDescriptor` / `ObjectSchema` and the tool helpers
 (`toAgentToolDescriptors`, `parseToolArgs`, `stringifyHandlerResult`);
 `mintId` / `stableStringify`; `runAgentLoop`; plus the re-exported

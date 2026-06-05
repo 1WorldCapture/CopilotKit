@@ -115,7 +115,7 @@ resumes the agent via `thread.resume(value)`.
 The adapter resolves each turn's Slack user id to a richer `PlatformUser`
 (`{ id, name?, email? }`), cached per id. Inbound files can be downloaded and
 delivered to the agent as multimodal content parts (`buildFileContentParts`);
-a tool can post a file back out via `ctx.postFile`.
+a tool can post a file back out via `thread.postFile(...)`.
 
 ### Built-ins
 
@@ -124,31 +124,22 @@ a tool can post a file back out via `ctx.postFile`.
 - `defaultSlackContext` — tagging procedure, Markdown-vs-mrkdwn guidance, and
   the Slack thread/DM conversation model. Spread into `context`.
 
-## `SlackToolContext`
+## Tool context
 
-When the agent calls one of your tools, the handler `ctx` carries the
-Slack-specific context the adapter merges in for the turn:
+There is no Slack-specific tool context. Tools receive the single shared
+`BotToolContext` from `@copilotkit/bot` (`{ thread, message?, user?, signal?,
+platform }`) and reach Slack power only through capability-gated `thread`
+methods, which this adapter backs:
 
-```ts
-interface SlackToolContext {
-  client: WebClient;
-  channel: string;
-  threadTs?: string;
-  botUserId: string;
-  senderUserId?: string;
-  conversationKey?: string;
-  signal?: AbortSignal;
-  postFile?(args: {
-    bytes: Uint8Array;
-    filename: string;
-    title?: string;
-    altText?: string;
-  }): Promise<{ ok: boolean; fileId?: string; error?: string }>;
-}
-```
+- `thread.getMessages()` — the current thread's messages (via
+  `conversations.replies`), each a `ThreadMessage` (`{ user?, text, ts?,
+  isBot? }`).
+- `thread.lookupUser(query)` — resolve a name/handle/email to a `PlatformUser`.
+- `thread.postFile({ bytes, filename, title?, altText? })` — upload a file
+  back into the thread (`files.uploadV2`).
 
-Type your tools as `SlackBotTool` (= `BotTool` narrowed to `SlackToolContext`)
-to get this typed end-to-end.
+This keeps tools portable: define them with `defineBotTool({...})` and they
+work against any adapter that advertises the same capabilities.
 
 ## Running the demo
 
@@ -172,7 +163,7 @@ above against a real workspace lives in
 `decodeInteraction`, `conversationKeyOf`; `renderBlockKit`,
 `renderSlackMessage`, `SLACK_LIMITS`; `defaultSlackTools`,
 `lookupSlackUserTool`, `defaultSlackContext` (+ the individual context
-entries); `SlackToolContext`, `SlackBotTool`; `markdownToMrkdwn`; and the
+entries); `markdownToMrkdwn`; and the
 preserved mechanics (`SlackConversationStore`, `MessageStream`,
 `ChunkedMessageStream`, `attachSlackListener`, `SanitizingHttpAgent`,
 `buildFileContentParts`, `autoCloseOpenMarkdown`, and supporting types).

@@ -35,8 +35,12 @@ and opaque-id interactions.
 - `createRunRenderer(target)` — the AG-UI `RunRenderer` for a run
 - `decodeInteraction(raw)` — native `block_actions` payload → `InteractionEvent`
 - `lookupUser(query)` — directory search for `@`-mention resolution
+  (backs `thread.lookupUser`)
+- `getMessages(target)` — the thread's messages via `conversations.replies`
+  (backs `thread.getMessages`)
+- `postFile(target, args)` — upload a file via `files.uploadV2`
+  (backs `thread.postFile`)
 - `conversationStore` — Slack-backed `getOrCreate` → `AgentSession`
-- `toolContext(replyTarget)` — the `SlackToolContext` merged into tool ctx
 
 The engine drives ingress through the `IngressSink` it hands to `start`
 (`sink.onTurn` / `sink.onInteraction`) and egress through these methods.
@@ -88,11 +92,13 @@ tool-status rows (`showToolStatus`), and captures frontend tool calls and
 ### Tools
 
 When the agent calls a registered frontend tool, the loop validates the args
-(Standard Schema) and invokes `tool.handler(args, ctx)`. `ctx` includes the
-`Thread` plus the adapter's `toolContext` (`SlackToolContext`: `client`,
-`channel`, `threadTs`, `botUserId`, `postFile`). A render-tool handler
-renders JSX with `thread.post(<Card .../>)`, which goes through the engine's
-action-binding then `renderSlackMessage` / `renderBlockKit` → Block Kit.
+(Standard Schema) and invokes `tool.handler(args, ctx)`. `ctx` is the single
+shared `BotToolContext` (`{ thread, message?, user?, signal?, platform }`) —
+there is no Slack-specific context. Slack power is reached only through
+capability-gated `thread` methods the adapter backs (`getMessages`,
+`lookupUser`, `postFile`). A render-tool handler renders JSX with
+`thread.post(<Card .../>)`, which goes through the engine's action-binding
+then `renderSlackMessage` / `renderBlockKit` → Block Kit.
 
 ### HITL & interrupts
 
@@ -148,7 +154,6 @@ src/
 ├── sanitizing-http-agent.ts  # sanitizing AG-UI HTTP agent
 ├── built-in-tools.ts         # lookup_slack_user + defaultSlackTools (as BotTools)
 ├── built-in-context.ts       # tagging / mrkdwn / convo-model context entries
-├── tool-context.ts           # SlackToolContext, SlackBotTool
 └── types.ts                  # IncomingTurn, ReplyTarget, ConversationKey, DM_SCOPE
 ```
 
