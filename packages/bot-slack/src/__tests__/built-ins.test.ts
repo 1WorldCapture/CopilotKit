@@ -1,183 +1,67 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  lookupSlackUserTool,
-  _resetLookupCache,
-  defaultSlackTools,
-} from "../built-in-tools.js";
+import { describe, it, expect, vi } from "vitest";
+import { lookupSlackUserTool, defaultSlackTools } from "../built-in-tools.js";
 import {
   defaultSlackContext,
   slackTaggingContext,
   slackFormattingContext,
   slackConversationModelContext,
 } from "../built-in-context.js";
-import type { SlackToolContext } from "../tool-context.js";
-import type { WebClient } from "@slack/web-api";
-
-const members = [
-  {
-    id: "U001",
-    name: "atai",
-    real_name: "Atai Barkai",
-    profile: {
-      real_name: "Atai Barkai",
-      display_name: "Atai",
-      display_name_normalized: "atai",
-      real_name_normalized: "atai barkai",
-      email: "atai@copilotkit.ai",
-    },
-  },
-  {
-    id: "U002",
-    name: "sarah",
-    real_name: "Sarah Chen",
-    profile: {
-      real_name: "Sarah Chen",
-      display_name: "Sarah",
-      display_name_normalized: "sarah",
-      real_name_normalized: "sarah chen",
-      email: "sarah@copilotkit.ai",
-    },
-  },
-  {
-    id: "BOT01",
-    name: "ag-ui-bot",
-    is_bot: true,
-    real_name: "AG-UI Bot",
-    profile: { real_name: "AG-UI Bot", display_name: "AG-UI Bot" },
-  },
-  {
-    id: "U003",
-    name: "departed",
-    deleted: true,
-    real_name: "Departed User",
-    profile: { real_name: "Departed User" },
-  },
-];
+import type { BotToolContext } from "@copilotkit/bot";
+import type { PlatformUser, Thread } from "@copilotkit/bot-ui";
 
 /**
- * The handler's `ctx` parameter is `BotToolContext<SlackToolContext> &
- * SlackToolContext`. The lookup handler only ever reads `ctx.client`, so the
- * tests build a minimal Slack tool context and pass it through this alias —
- * the cast keeps the call sites honest about which type the handler expects.
+ * Build a minimal handler ctx whose `thread.lookupUser` is the only capability
+ * the lookup tool touches. The fake resolves to whatever `user` we hand it.
  */
-type HandlerCtx = Parameters<typeof lookupSlackUserTool.handler>[1];
-
-/** Mock just the WebClient surface the handler touches (`users.list`). */
-function makeClient(listFn: ReturnType<typeof vi.fn>): WebClient {
-  return { users: { list: listFn } } as unknown as WebClient;
-}
-
-function makeCtx(): {
-  ctx: HandlerCtx;
-  listFn: ReturnType<typeof vi.fn>;
+function makeCtx(user?: PlatformUser): {
+  ctx: BotToolContext;
+  lookupUser: ReturnType<typeof vi.fn>;
 } {
-  const listFn = vi.fn(async () => ({
-    ok: true,
-    members,
-    response_metadata: {},
-  }));
-  const ctx: SlackToolContext = {
-    client: makeClient(listFn),
-    channel: "C1",
-    threadTs: "100.0",
-    botUserId: "BOT01",
-    conversationKey: "C1::100.0",
+  const lookupUser = vi.fn(async (_query: string) => user);
+  const thread = { lookupUser } as unknown as Thread;
+  return {
+    ctx: { thread, platform: "slack" } as BotToolContext,
+    lookupUser,
   };
-  return { ctx: ctx as HandlerCtx, listFn };
 }
 
 describe("lookup_slack_user", () => {
-  beforeEach(() => _resetLookupCache());
-
-  it("resolves by exact handle and returns a <@USERID> mention string", async () => {
-    const { ctx } = makeCtx();
-    const r = JSON.parse(
-      (await lookupSlackUserTool.handler({ query: "atai" }, ctx)) as string,
-    );
+  it("resolves a user via thread.lookupUser and returns a <@USERID> mention", async () => {
+    const { ctx, lookupUser } = makeCtx({
+      id: "U001",
+      name: "Atai Barkai",
+      handle: "atai",
+      email: "atai@copilotkit.ai",
+    });
+    const r = (await lookupSlackUserTool.handler({ query: "atai" }, ctx)) as {
+      found: boolean;
+      userId?: string;
+      mention?: string;
+      name?: string;
+      email?: string;
+    };
+    expect(lookupUser).toHaveBeenCalledWith("atai");
     expect(r.found).toBe(true);
     expect(r.userId).toBe("U001");
+    expect(r.name).toBe("Atai Barkai");
+    expect(r.email).toBe("atai@copilotkit.ai");
     expect(r.mention).toBe("<@U001>");
   });
 
-  it("resolves by display name", async () => {
-    const { ctx } = makeCtx();
-    const r = JSON.parse(
-      (await lookupSlackUserTool.handler({ query: "Sarah" }, ctx)) as string,
-    );
-    expect(r.userId).toBe("U002");
-  });
-
-  it("resolves by first name", async () => {
-    const { ctx } = makeCtx();
-    const r = JSON.parse(
-      (await lookupSlackUserTool.handler({ query: "Atai" }, ctx)) as string,
-    );
-    expect(r.userId).toBe("U001");
-  });
-
-  it("resolves by email", async () => {
-    const { ctx } = makeCtx();
-    const r = JSON.parse(
-      (await lookupSlackUserTool.handler(
-        { query: "sarah@copilotkit.ai" },
-        ctx,
-      )) as string,
-    );
-    expect(r.userId).toBe("U002");
-  });
-
-  it("returns found:false for unknown query — gracefully, not an error", async () => {
-    const { ctx } = makeCtx();
-    const r = JSON.parse(
-      (await lookupSlackUserTool.handler(
-        { query: "Nobody von Nope" },
-        ctx,
-      )) as string,
-    );
+  it("returns found:false (with the query echoed) when no user resolves", async () => {
+    const { ctx } = makeCtx(undefined);
+    const r = (await lookupSlackUserTool.handler(
+      { query: "Nobody von Nope" },
+      ctx,
+    )) as { found: boolean; query?: string };
     expect(r.found).toBe(false);
+    expect(r.query).toBe("Nobody von Nope");
   });
 
-  it("excludes bots and deleted users", async () => {
-    const { ctx } = makeCtx();
-    const a = JSON.parse(
-      (await lookupSlackUserTool.handler(
-        { query: "ag-ui-bot" },
-        ctx,
-      )) as string,
-    );
-    expect(a.found).toBe(false);
-    const b = JSON.parse(
-      (await lookupSlackUserTool.handler({ query: "departed" }, ctx)) as string,
-    );
-    expect(b.found).toBe(false);
-  });
-
-  it("caches the directory across calls (only one users.list per TTL)", async () => {
-    const { ctx, listFn } = makeCtx();
-    (await lookupSlackUserTool.handler({ query: "atai" }, ctx)) as string;
-    (await lookupSlackUserTool.handler({ query: "sarah" }, ctx)) as string;
-    expect(listFn).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns found:false (with reason) if users.list throws", async () => {
-    const ctx: SlackToolContext = {
-      client: makeClient(
-        vi.fn(async () => {
-          throw new Error("rate limited");
-        }),
-      ),
-      channel: "C1",
-      botUserId: "BOT01",
-      conversationKey: "C1::100.0",
-    };
-    const r = JSON.parse(
-      (await lookupSlackUserTool.handler(
-        { query: "atai" },
-        ctx as HandlerCtx,
-      )) as string,
-    );
-    expect(r.found).toBe(false);
-    expect(r.reason).toContain("rate limited");
+  it("returns a raw object (NOT a JSON string) for the run-loop to serialize", async () => {
+    const { ctx } = makeCtx({ id: "U002" });
+    const r = await lookupSlackUserTool.handler({ query: "sarah" }, ctx);
+    expect(typeof r).toBe("object");
   });
 });
 

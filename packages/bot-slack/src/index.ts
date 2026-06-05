@@ -39,7 +39,6 @@ export type {
 } from "./download-files.js";
 
 export { lookupSlackUserTool, defaultSlackTools } from "./built-in-tools.js";
-export type { SlackToolContext, SlackBotTool } from "./tool-context.js";
 
 export { slack, SlackAdapter } from "./adapter.js";
 export type { SlackAdapterOptions } from "./adapter.js";

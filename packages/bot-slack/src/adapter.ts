@@ -14,7 +14,7 @@ import type {
   UserQuery,
 } from "@copilotkit/bot";
 import type { AbstractAgent } from "@ag-ui/client";
-import type { IRNode } from "@copilotkit/bot-ui";
+import type { IRNode, ThreadMessage } from "@copilotkit/bot-ui";
 import { SlackConversationStore } from "./conversation-store.js";
 import { attachSlackListener } from "./slack-listener.js";
 import { createRunRenderer } from "./event-renderer.js";
@@ -24,7 +24,6 @@ import { ChunkedMessageStream } from "./chunked-message-stream.js";
 import { autoCloseOpenMarkdown } from "./auto-close-streaming.js";
 import { markdownToMrkdwn } from "./markdown-to-mrkdwn.js";
 import { DM_SCOPE, type ConversationKey, type ReplyTarget } from "./types.js";
-import type { SlackToolContext } from "./tool-context.js";
 
 export interface SlackAdapterOptions {
   /** Slack bot token (xoxb-…). */
@@ -340,15 +339,54 @@ export class SlackAdapter implements PlatformAdapter {
     };
   }
 
-  toolContext(replyTarget: BotReplyTarget): Record<string, unknown> {
-    const t = replyTarget as ReplyTarget;
-    const ctx: SlackToolContext = {
-      client: this.client,
-      channel: t.channel,
-      threadTs: t.threadTs,
-      botUserId: this.botUserId,
-    };
-    return ctx as unknown as Record<string, unknown>;
+  /**
+   * Read the conversation's recent messages. Backs the capability-gated
+   * `Thread.getMessages()`. For a thread target we read its replies; a flat
+   * target (DM, no `threadTs`) has no thread to fetch, so we return `[]`.
+   * Capped defensively to the last 100 messages.
+   */
+  async getMessages(target: BotReplyTarget): Promise<ThreadMessage[]> {
+    const t = target as ReplyTarget;
+    const threadTs = t.threadTs;
+    if (!threadTs) return [];
+    let messages: Array<{
+      text?: string;
+      ts?: string;
+      user?: string;
+      bot_id?: string;
+      subtype?: string;
+    }> = [];
+    try {
+      const r = (await this.client.conversations.replies({
+        channel: t.channel,
+        ts: threadTs,
+        limit: 100,
+      })) as {
+        messages?: Array<{
+          text?: string;
+          ts?: string;
+          user?: string;
+          bot_id?: string;
+          subtype?: string;
+        }>;
+      };
+      messages = r.messages ?? [];
+    } catch {
+      return [];
+    }
+    const out: ThreadMessage[] = [];
+    for (const m of messages.slice(-100)) {
+      // Skip Slack's own join/system subtype messages; keep regular messages
+      // and file shares.
+      if (m.subtype && m.subtype !== "file_share") continue;
+      out.push({
+        text: m.text ?? "",
+        ts: m.ts,
+        isBot: Boolean(m.bot_id),
+        user: m.user ? await this.resolveUser(m.user) : undefined,
+      });
+    }
+    return out;
   }
 
   async postFile(

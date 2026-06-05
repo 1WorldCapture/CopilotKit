@@ -190,20 +190,66 @@ describe("SlackAdapter.decodeInteraction", () => {
   });
 });
 
-describe("SlackAdapter.toolContext", () => {
-  it("returns a SlackToolContext carrying client/channel/botUserId (no postFile)", () => {
+describe("SlackAdapter.getMessages", () => {
+  it("maps conversations.replies to ThreadMessage[] (text/ts/isBot/resolved user)", async () => {
     const { adapter } = makeAdapter();
-    const ctx = adapter.toolContext({ channel: "C1", threadTs: "100.0" }) as {
-      client: unknown;
-      channel: string;
-      botUserId: string;
-      postFile?: unknown;
+    const replies = vi.fn(async (_arg: { channel: string; ts: string }) => ({
+      messages: [
+        { ts: "100.0", text: "hello", user: "U1" },
+        { ts: "100.1", text: "bot reply", bot_id: "B1" },
+        { ts: "100.2", text: "joined", subtype: "channel_join", user: "U9" },
+      ],
+    }));
+    const info = vi.fn(async (_arg: { user: string }) => ({
+      user: { id: "U1", name: "ana", real_name: "Ana Smith" },
+    }));
+    (adapter as unknown as { client: unknown }).client = {
+      conversations: { replies },
+      users: { info },
     };
-    expect(ctx.client).toBeDefined();
-    expect(ctx.channel).toBe("C1");
-    expect(ctx.botUserId).toBe("UBOT");
-    // File upload moved onto the platform-agnostic Thread.postFile / adapter.postFile.
-    expect(ctx.postFile).toBeUndefined();
+
+    const msgs = await adapter.getMessages({ channel: "C1", threadTs: "100.0" });
+
+    expect(replies).toHaveBeenCalledTimes(1);
+    const arg = replies.mock.calls[0]![0] as { channel: string; ts: string };
+    expect(arg.channel).toBe("C1");
+    expect(arg.ts).toBe("100.0");
+
+    // System (channel_join) subtype is skipped; the two real messages remain.
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0]).toEqual({
+      text: "hello",
+      ts: "100.0",
+      isBot: false,
+      user: { id: "U1", name: "Ana Smith", email: undefined },
+    });
+    expect(msgs[1]!.isBot).toBe(true);
+    expect(msgs[1]!.text).toBe("bot reply");
+    expect(msgs[1]!.user).toBeUndefined();
+  });
+
+  it("returns [] for a flat target with no threadTs (nothing to fetch)", async () => {
+    const { adapter } = makeAdapter();
+    const replies = vi.fn();
+    (adapter as unknown as { client: unknown }).client = {
+      conversations: { replies },
+    };
+    const msgs = await adapter.getMessages({ channel: "C1" });
+    expect(msgs).toEqual([]);
+    expect(replies).not.toHaveBeenCalled();
+  });
+
+  it("returns [] when conversations.replies throws", async () => {
+    const { adapter } = makeAdapter();
+    (adapter as unknown as { client: unknown }).client = {
+      conversations: {
+        replies: vi.fn(async () => {
+          throw new Error("rate_limited");
+        }),
+      },
+    };
+    const msgs = await adapter.getMessages({ channel: "C1", threadTs: "100.0" });
+    expect(msgs).toEqual([]);
   });
 });
 
