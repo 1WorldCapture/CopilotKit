@@ -1,7 +1,7 @@
 import type { AbstractAgent } from "@ag-ui/client";
 import type { Message } from "@ag-ui/core";
 import type { RunRenderer, CapturedToolCall, CapturedInterrupt } from "./platform-adapter.js";
-import type { BotTool, AgentToolDescriptor, ContextEntry } from "./tools.js";
+import type { BotTool, BotToolContext, AgentToolDescriptor, ContextEntry } from "./tools.js";
 import { parseToolArgs, stringifyHandlerResult } from "./tools.js";
 
 export interface RunLoopArgs {
@@ -10,8 +10,8 @@ export interface RunLoopArgs {
   tools: Map<string, BotTool>;
   toolDescriptors: AgentToolDescriptor[];
   context: ContextEntry[];
-  /** ctx passed to tool.handler (thread + platform extras). */
-  makeToolCtx: (call: CapturedToolCall) => unknown;
+  /** ctx passed to tool.handler (thread + platform). */
+  makeToolCtx: (call: CapturedToolCall) => BotToolContext;
   /** Invoke the registered onInterrupt handler (posts a picker); the loop then ends. */
   handleInterrupt?: (interrupt: CapturedInterrupt) => Promise<void> | void;
   isAborted?: () => boolean;

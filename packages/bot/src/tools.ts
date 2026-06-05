@@ -4,19 +4,14 @@ import type { Thread, IncomingMessage, PlatformUser } from "@copilotkit/bot-ui";
 
 export type { ObjectSchema } from "./standard-schema.js";
 
-export interface PlatformToolContext {
-  platform: string;
-  signal?: AbortSignal;
-  [k: string]: unknown;
-}
-export interface BotToolContext<Extra = Record<string, unknown>> {
+export interface BotToolContext {
   thread: Thread;
   message?: IncomingMessage;
   user?: PlatformUser;
   signal?: AbortSignal;
   platform: string;
 }
-export type BotTool<Schema extends ObjectSchema = ObjectSchema, Extra = Record<string, unknown>> = {
+export type BotTool<Schema extends ObjectSchema = ObjectSchema> = {
   name: string;
   description: string;
   parameters: Schema;
@@ -37,35 +32,32 @@ export type BotTool<Schema extends ObjectSchema = ObjectSchema, Extra = Record<s
    * - a data tool → the data itself (return the raw object/array — the SDK
    *   serializes it for you).
    */
-  handler(args: InferSchemaOutput<Schema>, ctx: BotToolContext<Extra> & Extra): Promise<unknown> | unknown;
+  handler(args: InferSchemaOutput<Schema>, ctx: BotToolContext): Promise<unknown> | unknown;
 };
 
 /**
  * Define a {@link BotTool} with full type inference. The handler's `args` are
- * inferred from `parameters`, and the handler `ctx` is typed by the `Ctx` you
- * supply (the per-platform tool context an adapter provides at runtime).
- *
- * Curried because TypeScript cannot partially infer type arguments: specify the
- * context type, then pass the tool (whose schema is inferred from `parameters`):
+ * inferred from `parameters`, and `ctx` is the generic {@link BotToolContext}
+ * ({@link Thread} + optional message/user/signal + platform). Reach for
+ * platform power via capability-gated `thread` methods (e.g.
+ * `thread.getMessages()`, `thread.lookupUser(query)`).
  *
  * ```ts
- * const tool = defineBotTool<SlackToolContext>()({
+ * const tool = defineBotTool({
  *   name: "show_thing",
  *   description: "...",
  *   parameters: z.object({ id: z.string() }),
- *   async handler({ id }, { thread, client }) {  // `id` and `ctx` fully typed
+ *   async handler({ id }, { thread }) {  // `id` and `ctx` fully typed
  *     await thread.post(<Thing id={id} />);
  *     return "Displayed the thing.";
  *   },
  * });
  * ```
  */
-export function defineBotTool<Ctx = Record<string, unknown>>() {
-  return <Schema extends ObjectSchema>(tool: BotTool<Schema, Ctx>): BotTool<Schema, Ctx> => tool;
+export function defineBotTool<Schema extends ObjectSchema>(tool: BotTool<Schema>): BotTool<Schema> {
+  return tool;
 }
 
-// Adapter-supplied tool context is provided at runtime (e.g. SlackToolContext); typed loosely here. Full adapter<->tool type coupling is a future enhancement.
-export type AnyBotTool = BotTool<ObjectSchema, any>;
 export interface ContextEntry {
   description: string;
   value: string;

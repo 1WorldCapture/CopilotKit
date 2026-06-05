@@ -1,5 +1,5 @@
 import type { AgentSubscriber, AbstractAgent } from "@ag-ui/client";
-import type { IRNode, MessageRef, PlatformUser } from "@copilotkit/bot-ui";
+import type { IRNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
 
 /** Opaque to the bot core — created by an adapter during ingress and passed back to post/createRunRenderer. */
 export type ReplyTarget = unknown;
@@ -91,12 +91,11 @@ export interface PlatformAdapter {
   lookupUser(q: UserQuery): Promise<PlatformUser | undefined>;
   readonly conversationStore: ConversationStore;
   /**
-   * Optional per-turn platform context merged into every tool's `ctx`.
-   * Called once per run with the conversation's reply target; the returned
-   * fields (e.g. a Slack `WebClient`, channel, postFile helper) are spread
-   * into the tool-call context so platform tools can act on the surface.
+   * Optional conversation-history read. Backs the capability-gated
+   * `Thread.getMessages()`; adapters that can't read history simply omit this,
+   * and `Thread.getMessages()` returns `[]`.
    */
-  toolContext?(replyTarget: ReplyTarget): Record<string, unknown>;
+  getMessages?(target: ReplyTarget): Promise<ThreadMessage[]>;
   /**
    * Optional platform file upload. Threads expose `postFile` unconditionally;
    * adapters that can't upload simply omit this, and `Thread.postFile` returns

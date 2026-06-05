@@ -1,11 +1,16 @@
 import type { PlatformAdapter, ReplyTarget } from "./platform-adapter.js";
 import type { ActionRegistry } from "./action-registry.js";
-import type { Renderable, MessageRef, Thread as ThreadInterface } from "@copilotkit/bot-ui";
+import type {
+  Renderable,
+  MessageRef,
+  PlatformUser,
+  ThreadMessage,
+  Thread as ThreadInterface,
+} from "@copilotkit/bot-ui";
 import { runAgentLoop } from "./run-loop.js";
 import { toAgentToolDescriptors } from "./tools.js";
-import type { BotTool, ContextEntry, AgentToolDescriptor } from "./tools.js";
+import type { BotTool, BotToolContext, ContextEntry, AgentToolDescriptor } from "./tools.js";
 import type { AbstractAgent } from "@ag-ui/client";
-import type { CapturedToolCall } from "./platform-adapter.js";
 
 export interface ThreadDeps {
   adapter: PlatformAdapter;
@@ -18,8 +23,6 @@ export interface ThreadDeps {
   context: ContextEntry[];
   registerWaiter: (conversationKey: string, resolve: (value: unknown) => void) => void;
   interruptHandlers: Map<string, (args: { payload: unknown; thread: Thread }) => void | Promise<void>>;
-  /** Optional adapter-supplied extra tool context (merged into the per-call ctx). */
-  adapterToolContext?: (call: CapturedToolCall) => Record<string, unknown>;
 }
 
 /** A concrete conversation thread: posts UI, runs the agent loop, and resolves HITL waiters. */
@@ -68,6 +71,16 @@ export class Thread implements ThreadInterface {
       return { ok: false, error: `${this.platform} does not support file upload` };
     }
     return adapter.postFile(this.deps.replyTarget, args);
+  }
+
+  /** Read the conversation's messages (returns `[]` when the adapter can't read history). */
+  async getMessages(): Promise<ThreadMessage[]> {
+    return (await this.deps.adapter.getMessages?.(this.deps.replyTarget)) ?? [];
+  }
+
+  /** Resolve a platform user by free-form query (returns `undefined` when unsupported). */
+  async lookupUser(query: string): Promise<PlatformUser | undefined> {
+    return this.deps.adapter.lookupUser?.({ query });
   }
 
   /** Post a picker and wait until an interaction in this conversation resolves it. */
@@ -120,10 +133,9 @@ export class Thread implements ThreadInterface {
       tools,
       toolDescriptors,
       context,
-      makeToolCtx: (call) => ({
+      makeToolCtx: (): BotToolContext => ({
         thread: this,
         platform: this.platform,
-        ...(this.deps.adapterToolContext?.(call) ?? {}),
       }),
       handleInterrupt: async (interrupt) => {
         const h = this.deps.interruptHandlers.get(interrupt.eventName);

@@ -36,10 +36,8 @@ export { ActionRegistry, ActionExpiredError } from "./action-registry.js";
 export { toAgentToolDescriptors, parseToolArgs, stringifyHandlerResult, defineBotTool } from "./tools.js";
 export type {
   BotTool,
-  AnyBotTool,
   ObjectSchema,
   BotToolContext,
-  PlatformToolContext,
   ContextEntry,
   AgentToolDescriptor,
 } from "./tools.js";

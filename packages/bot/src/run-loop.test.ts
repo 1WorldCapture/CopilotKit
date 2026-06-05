@@ -48,7 +48,7 @@ describe("runAgentLoop", () => {
       tools,
       toolDescriptors,
       context,
-      makeToolCtx: () => ({ platform: "fake" }),
+      makeToolCtx: () => ({ thread: {} as never, platform: "fake" }),
     });
 
     expect(recorded).toEqual([{ msg: "hi" }]);
@@ -78,7 +78,7 @@ describe("runAgentLoop", () => {
       tools,
       toolDescriptors,
       context,
-      makeToolCtx: () => ({ platform: "fake" }),
+      makeToolCtx: () => ({ thread: {} as never, platform: "fake" }),
       handleInterrupt,
     });
 

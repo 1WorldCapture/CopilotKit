@@ -1,5 +1,5 @@
 import type { AgentSubscriber } from "@ag-ui/client";
-import type { IRNode, MessageRef, PlatformUser } from "@copilotkit/bot-ui";
+import type { IRNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
 import type {
   PlatformAdapter, SurfaceCapabilities, IngressSink, IncomingTurn,
   InteractionEvent, RunRenderer, CapturedToolCall, CapturedInterrupt,
@@ -53,6 +53,10 @@ export class FakeAdapter implements PlatformAdapter {
   updated: { ref: MessageRef; ir: IRNode[] }[] = [];
   interactionsSeen: InteractionEvent[] = [];
   lastRunRenderer?: RunRenderer;
+  /** History returned by getMessages(); override in tests. */
+  messages: ThreadMessage[] = [];
+  /** User returned by lookupUser(); override in tests. */
+  user?: PlatformUser;
   private sink?: IngressSink;
   private counter = 0;
 
@@ -88,7 +92,10 @@ export class FakeAdapter implements PlatformAdapter {
     return raw as InteractionEvent;
   }
   async lookupUser(_q: UserQuery): Promise<PlatformUser | undefined> {
-    return undefined;
+    return this.user;
+  }
+  async getMessages(_target: ReplyTarget): Promise<ThreadMessage[]> {
+    return this.messages;
   }
 
   // --- test helpers ---

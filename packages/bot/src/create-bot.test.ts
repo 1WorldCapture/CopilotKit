@@ -143,6 +143,28 @@ describe("createBot", () => {
     expect(result).toEqual({ ok: false, error: "fake does not support file upload" });
   });
 
+  it("thread.getMessages and thread.lookupUser surface the adapter's data", async () => {
+    const fake = new FakeAdapter();
+    fake.messages = [{ user: { id: "u1", name: "Ada" }, text: "hi", ts: "1", isBot: false }];
+    fake.user = { id: "u1", name: "Ada" };
+    const agent = new FakeAgent();
+    const bot = createBot({ adapters: [fake], agent: () => agent });
+
+    let history: unknown;
+    let resolved: unknown;
+    bot.onMention(async ({ thread }) => {
+      history = await thread.getMessages();
+      resolved = await thread.lookupUser("Ada");
+    });
+
+    await bot.start();
+    fake.emitTurn({ userText: "hi", conversationKey: "c1" });
+    await tick();
+
+    expect(history).toEqual([{ user: { id: "u1", name: "Ada" }, text: "hi", ts: "1", isBot: false }]);
+    expect(resolved).toEqual({ id: "u1", name: "Ada" });
+  });
+
   it("resolves awaitChoice when a matching interaction arrives", async () => {
     const fake = new FakeAdapter();
     const agent = new FakeAgent();

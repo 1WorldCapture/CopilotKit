@@ -6,7 +6,7 @@ import type {
 } from "./platform-adapter.js";
 import { ActionRegistry, ActionExpiredError } from "./action-registry.js";
 import { InMemoryActionStore, type ActionStore } from "./action-store.js";
-import { toAgentToolDescriptors, type AnyBotTool, type ContextEntry } from "./tools.js";
+import { toAgentToolDescriptors, type BotTool, type ContextEntry } from "./tools.js";
 import { Thread, type ThreadDeps } from "./thread.js";
 import type { AbstractAgent } from "@ag-ui/client";
 import type { InteractionContext, IncomingMessage } from "@copilotkit/bot-ui";
@@ -20,7 +20,7 @@ export interface CreateBotOptions {
   adapters: PlatformAdapter[];
   agent?: AbstractAgent | ((threadId: string) => AbstractAgent);
   actionStore?: ActionStore;
-  tools?: AnyBotTool[];
+  tools?: BotTool[];
   context?: ContextEntry[];
 }
 
@@ -32,7 +32,7 @@ export interface Bot {
     eventName: string,
     h: (args: { payload: unknown; thread: Thread }) => void | Promise<void>,
   ): void;
-  tool(t: AnyBotTool): void;
+  tool(t: BotTool): void;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -49,7 +49,7 @@ export function createBot(opts: CreateBotOptions): Bot {
     };
   })();
 
-  const toolMap = new Map<string, AnyBotTool>();
+  const toolMap = new Map<string, BotTool>();
   for (const t of opts.tools ?? []) toolMap.set(t.name, t);
   const context = opts.context ?? [];
 
@@ -81,10 +81,6 @@ export function createBot(opts: CreateBotOptions): Bot {
       context,
       registerWaiter: (k, r) => waiters.set(k, r),
       interruptHandlers,
-      // Merge the adapter's per-turn platform context (e.g. Slack client +
-      // channel) into every tool-call ctx. Bound to this thread's reply
-      // target; the captured-call arg is unused by the adapter hook.
-      adapterToolContext: () => adapter.toolContext?.(replyTarget) ?? {},
     };
     return new Thread(deps);
   }
