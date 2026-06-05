@@ -55,7 +55,7 @@ describe("SlackAdapter.post", () => {
     expect((ref as { channel?: string }).channel).toBe("C1");
   });
 
-  it("renders a <Message accent> as a colored attachment ONLY — no top-level text/blocks (the attachment fallback is the notification text)", async () => {
+  it("renders a <Message accent> as a colored attachment with a short top-level text and NO fallback on the attachment", async () => {
     const { adapter, chat } = makeAdapter();
     const header = (text: string): IRNode => ({
       type: "header",
@@ -71,18 +71,19 @@ describe("SlackAdapter.post", () => {
     const arg = chat.postMessage.mock.calls[0]![0] as {
       text?: unknown;
       blocks?: unknown;
-      attachments?: Array<{ color: string; blocks: Array<{ type: string }>; fallback: string }>;
+      attachments?: Array<{ color: string; blocks: Array<{ type: string }>; fallback?: unknown }>;
       unfurl_links?: boolean;
       unfurl_media?: boolean;
     };
-    // No top-level body text and no top-level blocks: Slack renders only the card.
-    expect(arg.text).toBeUndefined();
+    // Short top-level text (the notification/a11y summary) AND a colored
+    // attachment card with { color, blocks } — never a legacy `fallback` on
+    // the attachment (that triggers invalid_attachments). No top-level blocks.
+    expect(arg.text).toBe("Open issues");
     expect(arg.blocks).toBeUndefined();
     expect(arg.attachments).toHaveLength(1);
     expect(arg.attachments![0]!.color).toBe("#27AE60");
     expect(arg.attachments![0]!.blocks[0]!.type).toBe("header");
-    // The attachment fallback is the short summary (the header text).
-    expect(arg.attachments![0]!.fallback).toBe("Open issues");
+    expect(arg.attachments![0]!.fallback).toBeUndefined();
     // Unfurling is suppressed on the post.
     expect(arg.unfurl_links).toBe(false);
     expect(arg.unfurl_media).toBe(false);
@@ -115,11 +116,11 @@ describe("SlackAdapter.post", () => {
       },
     ]);
     const arg = chat.postMessage.mock.calls[0]![0] as {
-      attachments?: Array<{ fallback: string }>;
+      text?: string;
     };
-    // The fallback is the header only — it must NOT concatenate the row text.
-    expect(arg.attachments![0]!.fallback).toBe("Open CPK issues");
-    expect(arg.attachments![0]!.fallback).not.toContain("CPK-1");
+    // The short summary is the header only — it must NOT concatenate the row text.
+    expect(arg.text).toBe("Open CPK issues");
+    expect(arg.text).not.toContain("CPK-1");
   });
 });
 
@@ -138,7 +139,7 @@ describe("SlackAdapter.update / delete use the stashed channel", () => {
     expect(arg.ts).toBe("200.5");
   });
 
-  it("update of an accent card sets attachments+fallback and no top-level text", async () => {
+  it("update of an accent card sets a short top-level text and attachments with NO fallback", async () => {
     const { adapter, chat } = makeAdapter();
     const header = (text: string): IRNode => ({
       type: "header",
@@ -153,12 +154,12 @@ describe("SlackAdapter.update / delete use the stashed channel", () => {
     const arg = chat.update.mock.calls[0]![0] as {
       text?: unknown;
       blocks?: unknown;
-      attachments?: Array<{ color: string; fallback: string }>;
+      attachments?: Array<{ color: string; fallback?: unknown }>;
     };
-    expect(arg.text).toBeUndefined();
+    expect(arg.text).toBe("Updated");
     expect(arg.blocks).toBeUndefined();
     expect(arg.attachments![0]!.color).toBe("#EB5757");
-    expect(arg.attachments![0]!.fallback).toBe("Updated");
+    expect(arg.attachments![0]!.fallback).toBeUndefined();
   });
 
   it("delete removes the message at ref.id on its channel", async () => {

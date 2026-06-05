@@ -141,17 +141,18 @@ export class SlackAdapter implements PlatformAdapter {
       thread_ts: t.threadTs,
       unfurl_links: false,
       unfurl_media: false,
+      // Short one-line notification/a11y fallback. Slack does NOT render a
+      // top-level `text` as the message body when `blocks`/`attachments` are
+      // present, so this is safe on both paths.
+      text: summary,
     };
-    // ACCENT path: render ONLY the colored attachment card. The attachment's
-    // `fallback` is the notification text; we deliberately omit the top-level
-    // `text` — Slack renders a top-level `text` as the message BODY above the
-    // attachment, producing a duplicate "text wall + card". NON-ACCENT path:
-    // top-level `text` is just the notification fallback and is NOT rendered as
-    // a body when `blocks` are present.
+    // ACCENT path: render the colored attachment card. The attachment carries
+    // ONLY `{ color, blocks }` — adding a legacy `fallback` field alongside
+    // `blocks` makes Slack reject the payload with `invalid_attachments`.
     const res = await this.client.chat.postMessage(
       (accent
-        ? { ...base, attachments: [{ color: accent, blocks, fallback: summary }] }
-        : { ...base, text: summary, blocks }) as unknown as Parameters<
+        ? { ...base, attachments: [{ color: accent, blocks }] }
+        : { ...base, blocks }) as unknown as Parameters<
         WebClient["chat"]["postMessage"]
       >[0],
     );
@@ -169,7 +170,8 @@ export class SlackAdapter implements PlatformAdapter {
         ? ({
             channel,
             ts: ref.id,
-            attachments: [{ color: accent, blocks, fallback: summary }],
+            text: summary,
+            attachments: [{ color: accent, blocks }],
           } as unknown as Parameters<WebClient["chat"]["update"]>[0])
         : {
             channel,
