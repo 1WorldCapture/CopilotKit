@@ -1,4 +1,4 @@
-import type { IRNode } from "./ir.js";
+import type { BotNode } from "./ir.js";
 import type { ClickHandler } from "./types.js";
 
 /**
@@ -6,18 +6,18 @@ import type { ClickHandler } from "./types.js";
  * text, numbers, and conditionals (`false` / `null` / `undefined` render
  * nothing), plus arrays thereof.
  */
-export type BotNode =
-  | IRNode
+export type BotChildren =
+  | BotNode
   | string
   | number
   | boolean
   | null
   | undefined
-  | BotNode[];
+  | BotChildren[];
 
 /** Mixin for the container components that wrap children. */
 interface WithChildren {
-  children?: BotNode;
+  children?: BotChildren;
 }
 
 // ---- Component prop types ------------------------------------------------
@@ -46,11 +46,15 @@ export interface ImageProps {
 /** `<Divider />` takes no props or children. */
 export type DividerProps = { children?: never };
 
-export interface ButtonProps extends WithChildren {
-  /** Inline handler run when the button is clicked (bound by the action registry). */
-  onClick?: ClickHandler;
-  /** Opaque value echoed back on click. */
-  value?: unknown;
+export interface ButtonProps<TValue = unknown> extends WithChildren {
+  /**
+   * Inline handler run when the button is clicked (bound by the action
+   * registry). Its `ctx.action.value` is typed as `TValue`, inferred from
+   * `value`.
+   */
+  onClick?: ClickHandler<TValue>;
+  /** Value echoed back to `onClick`/`awaitChoice` on click; drives `TValue`. */
+  value?: TValue;
   /** Slack button accent. */
   style?: "primary" | "danger";
 }
@@ -60,13 +64,15 @@ export interface SelectOption {
   value: string;
 }
 export interface SelectProps {
-  onSelect?: ClickHandler;
+  /** Handler run on selection; `ctx.action.value` is the chosen option's `value`. */
+  onSelect?: ClickHandler<string>;
   placeholder?: string;
   options: SelectOption[];
 }
 
 export interface InputProps {
-  onSubmit?: ClickHandler;
+  /** Handler run on submit; `ctx.action.value` is the entered text. */
+  onSubmit?: ClickHandler<string>;
   placeholder?: string;
   multiline?: boolean;
   name?: string;
@@ -88,7 +94,7 @@ export interface CellProps extends WithChildren {}
 
 const intrinsic =
   <P,>(type: string) =>
-  (props: P): IRNode => ({ type, props: (props ?? {}) as Record<string, unknown> });
+  (props: P): BotNode => ({ type, props: (props ?? {}) as Record<string, unknown> });
 
 export const Message = intrinsic<MessageProps>("message");
 export const Header = intrinsic<HeaderProps>("header");
@@ -103,15 +109,15 @@ export const Divider = intrinsic<DividerProps>("divider");
 export const Row = intrinsic<RowProps>("row");
 export const Cell = intrinsic<CellProps>("cell");
 
-export function Button(props: ButtonProps): IRNode {
+export function Button<TValue = unknown>(props: ButtonProps<TValue>): BotNode {
   return { type: "button", props: props as unknown as Record<string, unknown> };
 }
-export function Select(props: SelectProps): IRNode {
+export function Select(props: SelectProps): BotNode {
   return { type: "select", props: props as unknown as Record<string, unknown> };
 }
-export function Input(props: InputProps): IRNode {
+export function Input(props: InputProps): BotNode {
   return { type: "input", props: props as unknown as Record<string, unknown> };
 }
-export function Table(props: TableProps): IRNode {
+export function Table(props: TableProps): BotNode {
   return { type: "table", props: props as unknown as Record<string, unknown> };
 }

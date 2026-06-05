@@ -8,7 +8,7 @@ a platform adapter (e.g. `@copilotkit/bot-slack`) translate the same UI into
 Block Kit, while keeping the component layer tree-shakeable and testable in
 isolation.
 
-You author UI as JSX, it normalizes to one serializable IR (`IRNode[]`), and
+You author UI as JSX, it normalizes to one serializable IR (`BotNode[]`), and
 behavior props (`onClick` / `onSelect` / `onSubmit`) ride along on the nodes
 for the engine (`@copilotkit/bot`) to bind.
 
@@ -54,10 +54,10 @@ function Greeting({ name }: { name: string }) {
 }
 
 const ir = renderToIR(<Greeting name="Ada" />);
-// ir is IRNode[] — hand it to an adapter, or let @copilotkit/bot post it.
+// ir is BotNode[] — hand it to an adapter, or let @copilotkit/bot post it.
 ```
 
-`renderToIR(ui: Renderable): IRNode[]` recursively invokes any component
+`renderToIR(ui: Renderable): BotNode[]` recursively invokes any component
 function (passing its props) until only intrinsic string-typed nodes remain;
 strings in children become `{ type: "text", props: { value } }`; `Fragment`
 flattens its children. Components must be **pure functions of serializable
@@ -70,7 +70,7 @@ short-circuit to a native payload.
 
 ## Component vocabulary
 
-Each component is a thin function returning an `IRNode` with a stable
+Each component is a thin function returning a `BotNode` with a stable
 intrinsic `type` string. An adapter maps these to native primitives.
 
 Every component has a fully-typed prop interface (`MessageProps`,
@@ -105,20 +105,25 @@ Interactive components carry handler props typed as `ClickHandler`:
 - `Select` → `onSelect`
 - `Input` → `onSubmit`
 
-A `ClickHandler` receives an `InteractionContext`:
+A `ClickHandler` receives an `InteractionContext`, both generic over the
+clicked control's value type:
 
 ```ts
-type ClickHandler = (ctx: InteractionContext) => void | Promise<void>;
+type ClickHandler<TValue = unknown> = (ctx: InteractionContext<TValue>) => void | Promise<void>;
 
-interface InteractionContext {
+interface InteractionContext<TValue = unknown> {
   thread: Thread;
   message: IncomingMessage;
-  action: { id: string; value?: unknown };
+  action: { id: string; value?: TValue };
   values: Record<string, unknown>;
   user: PlatformUser;
   platform: string;
 }
 ```
+
+`Button` is generic over its `value` prop, so `ctx.action.value` is **inferred**
+from `value` — `<Button value={{ confirmed: true }} onClick={(ctx) => ctx.action.value?.confirmed}>`
+type-checks with no cast. `Select`/`Input` resolve the value to `string`.
 
 The structural types `Thread`, `IncomingMessage`, `PlatformUser`,
 `MessageRef`, and `ClickHandler` are declared here for handler typing only —
@@ -148,5 +153,7 @@ import { bind } from "@copilotkit/bot-ui";
 Runtime: `renderToIR`, `Fragment`, `bind`, and the vocabulary
 (`Message`, `Header`, `Section`, `Markdown`, `Field`, `Fields`, `Context`,
 `Actions`, `Button`, `Select`, `Input`, `Image`, `Divider`).
-Types: `IRNode`, `ComponentFn`, `Renderable`, `Thread`, `InteractionContext`,
-`PlatformUser`, `IncomingMessage`, `MessageRef`, `ClickHandler`.
+Types: `BotNode`, `BotChildren`, `ComponentFn`, `Renderable`, `Thread`,
+`InteractionContext`, `PlatformUser`, `IncomingMessage`, `MessageRef`,
+`ClickHandler`, and the per-component prop types (`MessageProps`,
+`ButtonProps`, `SelectProps`, `TableProps`, `TableColumn`, …).

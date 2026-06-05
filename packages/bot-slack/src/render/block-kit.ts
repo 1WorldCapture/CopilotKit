@@ -1,4 +1,4 @@
-import type { IRNode } from "@copilotkit/bot-ui";
+import type { BotNode } from "@copilotkit/bot-ui";
 import type { KnownBlock } from "@slack/types";
 import { markdownToMrkdwn } from "../markdown-to-mrkdwn.js";
 import { SLACK_LIMITS, clampArray, truncateText } from "./budget.js";
@@ -13,7 +13,7 @@ import { SLACK_LIMITS, clampArray, truncateText } from "./budget.js";
  * {@link clampArray}; nothing is silently dropped — overflowing collections
  * clamp and, at the top level, append an explicit overflow signal block.
  */
-export function renderBlockKit(ir: IRNode[]): KnownBlock[] {
+export function renderBlockKit(ir: BotNode[]): KnownBlock[] {
   const blocks: KnownBlock[] = [];
   for (const node of ir) {
     renderNode(node, blocks);
@@ -33,7 +33,7 @@ export function renderBlockKit(ir: IRNode[]): KnownBlock[] {
 }
 
 /** Render IR to Slack blocks, extracting a top-level <Message accent="#hex"> color for an attachment wrapper. */
-export function renderSlackMessage(ir: IRNode[]): { blocks: KnownBlock[]; accent?: string } {
+export function renderSlackMessage(ir: BotNode[]): { blocks: KnownBlock[]; accent?: string } {
   const blocks = renderBlockKit(ir);
   // Top-level single <Message accent="..."> → use its accent as the attachment color.
   if (ir.length === 1 && ir[0] && ir[0].type === "message") {
@@ -51,7 +51,7 @@ function overflowSignal(count: number): KnownBlock {
 }
 
 /** Render a single IR node, pushing zero or more blocks onto `out`. */
-function renderNode(node: IRNode, out: KnownBlock[]): void {
+function renderNode(node: BotNode, out: KnownBlock[]): void {
   if (typeof node.type !== "string") return; // non-intrinsic — already expanded away
   const props = node.props ?? {};
   switch (node.type) {
@@ -211,7 +211,7 @@ function renderNode(node: IRNode, out: KnownBlock[]): void {
  * Render one interactive element inside an `actions` block. Returns `null` for
  * children that aren't renderable as action elements (so callers can filter).
  */
-function renderActionElement(node: IRNode): object | null {
+function renderActionElement(node: BotNode): object | null {
   if (typeof node.type !== "string") return null;
   const props = node.props ?? {};
   switch (node.type) {
@@ -266,18 +266,18 @@ function idFromHandler(handler: unknown): string | undefined {
   return undefined;
 }
 
-/** The expanded `children` of an IR node as an `IRNode[]` (empty if none). */
-function childNodes(node: IRNode): IRNode[] {
+/** The expanded `children` of an IR node as an `BotNode[]` (empty if none). */
+function childNodes(node: BotNode): BotNode[] {
   const children = node.props?.children;
-  if (Array.isArray(children)) return children as IRNode[];
+  if (Array.isArray(children)) return children as BotNode[];
   if (children && typeof children === "object" && "type" in (children as object)) {
-    return [children as IRNode];
+    return [children as BotNode];
   }
   return [];
 }
 
 /** Concatenate the `value` of all descendant `text` nodes (depth-first). */
-function collectText(node: IRNode): string {
+function collectText(node: BotNode): string {
   if (typeof node.type === "string" && node.type === "text") {
     return String(node.props?.value ?? "");
   }

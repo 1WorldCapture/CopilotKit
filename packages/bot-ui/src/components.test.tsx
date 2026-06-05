@@ -1,4 +1,4 @@
-import type { IRNode } from "./ir.js";
+import type { BotNode } from "./ir.js";
 import { describe, it, expect } from "vitest";
 import { renderToIR } from "./render.js";
 import {
@@ -46,6 +46,18 @@ const __typeGuards = () => {
     Go
   </Button>;
   <Image url="https://example.com/x.png" alt="x" />;
+
+  // Button.value flows into onClick: ctx.action.value is inferred, not unknown.
+  <Button
+    value={{ confirmed: true }}
+    onClick={(ctx) => {
+      ctx.action.value?.confirmed;
+      // @ts-expect-error 'nope' is not on the inferred value type
+      ctx.action.value?.nope;
+    }}
+  >
+    Confirm
+  </Button>;
 };
 void __typeGuards;
 
@@ -58,7 +70,7 @@ describe("component vocabulary", () => {
     const fn = () => {};
     const out = renderToIR(<Actions><Button onClick={fn} style="primary">Go</Button></Actions>);
     const actions = out[0]!;
-    const button = (actions.props.children as IRNode[])[0] as IRNode;
+    const button = (actions.props.children as BotNode[])[0] as BotNode;
     expect(button.type).toBe("button");
     expect(button.props.onClick).toBe(fn);
     expect(button.props.style).toBe("primary");
@@ -76,13 +88,13 @@ describe("component vocabulary", () => {
     const table = out[0]!;
     expect(table.type).toBe("table");
     expect((table.props.columns as unknown[]).length).toBe(2);
-    const rows = table.props.children as IRNode[];
+    const rows = table.props.children as BotNode[];
     const row = rows[0]!;
     expect(row.type).toBe("row");
-    const cells = row.props.children as IRNode[];
+    const cells = row.props.children as BotNode[];
     expect(cells.length).toBe(2);
     expect(cells[0]!.type).toBe("cell");
-    const cellText = (cells[0]!.props.children as IRNode[])[0]!;
+    const cellText = (cells[0]!.props.children as BotNode[])[0]!;
     expect(cellText).toMatchObject({ type: "text", props: { value: "Ana" } });
   });
 });

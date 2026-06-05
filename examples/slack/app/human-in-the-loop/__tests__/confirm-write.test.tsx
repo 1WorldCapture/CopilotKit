@@ -1,26 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
-import { renderToIR, type IRNode, type InteractionContext, type ClickHandler } from "@copilotkit/bot-ui";
+import { renderToIR, type BotNode, type InteractionContext, type ClickHandler } from "@copilotkit/bot-ui";
 import { renderSlackMessage } from "@copilotkit/bot-slack";
 import { ConfirmWrite } from "../confirm-write.js";
 
 /** Children of an IR node as an array (empty if none). */
-function childNodes(node: IRNode): IRNode[] {
+function childNodes(node: BotNode): BotNode[] {
   const children = node.props?.children;
-  if (Array.isArray(children)) return children as IRNode[];
+  if (Array.isArray(children)) return children as BotNode[];
   if (children && typeof children === "object" && "type" in (children as object)) {
-    return [children as IRNode];
+    return [children as BotNode];
   }
   return [];
 }
 
 /** Concatenate the text of all descendant `text` nodes (depth-first). */
-function collectText(node: IRNode): string {
+function collectText(node: BotNode): string {
   if (node.type === "text") return String(node.props?.value ?? "");
   return childNodes(node).map(collectText).join("");
 }
 
 /** Walk the whole tree to find the first node of a given intrinsic type. */
-function findByType(nodes: IRNode[], type: string): IRNode | undefined {
+function findByType(nodes: BotNode[], type: string): BotNode | undefined {
   for (const n of nodes) {
     if (n.type === type) return n;
     const hit = findByType(childNodes(n), type);
@@ -30,8 +30,8 @@ function findByType(nodes: IRNode[], type: string): IRNode | undefined {
 }
 
 /** All button nodes in the tree. */
-function findButtons(nodes: IRNode[]): IRNode[] {
-  const out: IRNode[] = [];
+function findButtons(nodes: BotNode[]): BotNode[] {
+  const out: BotNode[] = [];
   for (const n of nodes) {
     if (n.type === "button") out.push(n);
     out.push(...findButtons(childNodes(n)));
@@ -39,7 +39,7 @@ function findButtons(nodes: IRNode[]): IRNode[] {
   return out;
 }
 
-function buttonByText(ir: IRNode[], text: string): IRNode {
+function buttonByText(ir: BotNode[], text: string): BotNode {
   const btn = findButtons(ir).find((b) => collectText(b) === text);
   if (!btn) throw new Error(`button "${text}" not found`);
   return btn;

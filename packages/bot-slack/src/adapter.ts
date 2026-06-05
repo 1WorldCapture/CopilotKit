@@ -14,7 +14,7 @@ import type {
   UserQuery,
 } from "@copilotkit/bot";
 import type { AbstractAgent } from "@ag-ui/client";
-import type { IRNode, ThreadMessage } from "@copilotkit/bot-ui";
+import type { BotNode, ThreadMessage } from "@copilotkit/bot-ui";
 import { SlackConversationStore } from "./conversation-store.js";
 import { attachSlackListener } from "./slack-listener.js";
 import { createRunRenderer } from "./event-renderer.js";
@@ -124,11 +124,11 @@ export class SlackAdapter implements PlatformAdapter {
     await this.app.stop();
   }
 
-  render(ir: IRNode[]) {
+  render(ir: BotNode[]) {
     return renderBlockKit(ir);
   }
 
-  async post(target: BotReplyTarget, ir: IRNode[]): Promise<MessageRef> {
+  async post(target: BotReplyTarget, ir: BotNode[]): Promise<MessageRef> {
     const t = target as ReplyTarget;
     const { blocks, accent } = renderSlackMessage(ir);
     const summary = fallbackText(ir);
@@ -158,7 +158,7 @@ export class SlackAdapter implements PlatformAdapter {
     return { id: res.ts as string, channel: t.channel, ts: res.ts };
   }
 
-  async update(ref: MessageRef, ir: IRNode[]): Promise<void> {
+  async update(ref: MessageRef, ir: BotNode[]): Promise<void> {
     const channel = channelOf(ref);
     const { blocks, accent } = renderSlackMessage(ir);
     const summary = fallbackText(ir);
@@ -433,9 +433,9 @@ function channelOf(ref: MessageRef): string {
 }
 
 /** Collect a node's descendant text into a single whitespace-joined string. */
-function collectNodeText(node: IRNode): string {
+function collectNodeText(node: BotNode): string {
   const acc: string[] = [];
-  const visit = (n: IRNode): void => {
+  const visit = (n: BotNode): void => {
     if (typeof n.type === "string" && n.type === "text") {
       const value = n.props?.value;
       if (value != null) acc.push(String(value));
@@ -447,14 +447,14 @@ function collectNodeText(node: IRNode): string {
       : children && typeof children === "object" && "type" in children
         ? [children]
         : [];
-    for (const child of list as IRNode[]) visit(child);
+    for (const child of list as BotNode[]) visit(child);
   };
   visit(node);
   return acc.join(" ");
 }
 
 /** Depth-first search for the first node of `type` in the IR tree. */
-function findFirst(ir: IRNode[], type: string): IRNode | undefined {
+function findFirst(ir: BotNode[], type: string): BotNode | undefined {
   for (const node of ir) {
     if (typeof node.type === "string" && node.type === type) return node;
     const children = node.props?.children;
@@ -463,7 +463,7 @@ function findFirst(ir: IRNode[], type: string): IRNode | undefined {
       : children && typeof children === "object" && "type" in children
         ? [children]
         : [];
-    const found = findFirst(list as IRNode[], type);
+    const found = findFirst(list as BotNode[], type);
     if (found) return found;
   }
   return undefined;
@@ -477,7 +477,7 @@ function findFirst(ir: IRNode[], type: string): IRNode | undefined {
  * MUST stay short: it is the notification text, never a dump of the whole tree
  * (which Slack would render as a duplicate "text wall" above the card).
  */
-function fallbackText(ir: IRNode[]): string {
+function fallbackText(ir: BotNode[]): string {
   const header = findFirst(ir, "header");
   const source = header ? collectNodeText(header) : firstText(ir);
   const text = source.replace(/\s+/g, " ").trim();
@@ -486,7 +486,7 @@ function fallbackText(ir: IRNode[]): string {
 }
 
 /** First descendant text node's value across the whole IR, or "". */
-function firstText(ir: IRNode[]): string {
+function firstText(ir: BotNode[]): string {
   for (const node of ir) {
     const t = collectNodeText(node);
     if (t.trim()) return t;

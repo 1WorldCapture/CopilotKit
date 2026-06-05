@@ -36,8 +36,10 @@ export const confirmWriteTool = defineBotTool({
     "anything in Linear or Notion. Reads never need confirmation.",
   parameters: confirmWriteSchema,
   async handler({ action, detail }, { thread }) {
-    const choice = await thread.awaitChoice(<ConfirmWrite action={action} detail={detail} />);
-    return (choice as { confirmed?: boolean })?.confirmed
+    const choice = await thread.awaitChoice<{ confirmed?: boolean }>(
+      <ConfirmWrite action={action} detail={detail} />,
+    );
+    return choice?.confirmed
       ? "The user APPROVED the write — proceed."
       : "The user DECLINED — do not write; acknowledge and stop.";
   },

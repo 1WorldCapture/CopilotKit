@@ -84,9 +84,9 @@ export class Thread implements ThreadInterface {
   }
 
   /** Post a picker and wait until an interaction in this conversation resolves it. */
-  async awaitChoice(ui: Renderable): Promise<unknown> {
-    const p = new Promise<unknown>((resolve) =>
-      this.deps.registerWaiter(this.deps.conversationKey, resolve),
+  async awaitChoice<T = unknown>(ui: Renderable): Promise<T> {
+    const p = new Promise<T>((resolve) =>
+      this.deps.registerWaiter(this.deps.conversationKey, resolve as (value: unknown) => void),
     );
     await this.post(ui);
     return p;

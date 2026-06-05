@@ -3,17 +3,37 @@ import { createBot } from "./create-bot.js";
 import { FakeAdapter } from "./testing/fake-adapter.js";
 import { FakeAgent } from "./testing/fake-agent.js";
 import { Section, Actions, Button } from "@copilotkit/bot-ui";
-import type { IRNode } from "@copilotkit/bot-ui";
+import type { BotNode } from "@copilotkit/bot-ui";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
+/**
+ * Compile-time guards for the handler generics (validated by check-types/build,
+ * never executed). `onInterrupt<T>` types `payload`; `onInteraction<T>` types
+ * `ctx.action.value`.
+ */
+const __handlerTypeGuards = () => {
+  const bot = createBot({ adapters: [new FakeAdapter()] });
+  bot.onInterrupt<{ question: string }>("ask", ({ payload }) => {
+    payload.question.toUpperCase();
+    // @ts-expect-error 'missing' is not on the payload type
+    payload.missing;
+  });
+  bot.onInteraction<{ page: number }>("next", (ctx) => {
+    ctx.action.value?.page.toFixed(0);
+    // @ts-expect-error 'nope' is not on the action value type
+    ctx.action.value?.nope;
+  });
+};
+void __handlerTypeGuards;
+
 /** Recursively find the first node of a given type in an IR tree. */
-function findNode(nodes: IRNode[], type: string): IRNode | undefined {
+function findNode(nodes: BotNode[], type: string): BotNode | undefined {
   for (const n of nodes) {
     if (n.type === type) return n;
     const children = n.props.children;
     if (Array.isArray(children)) {
-      const found = findNode(children as IRNode[], type);
+      const found = findNode(children as BotNode[], type);
       if (found) return found;
     }
   }
@@ -21,12 +41,12 @@ function findNode(nodes: IRNode[], type: string): IRNode | undefined {
 }
 
 /** Concatenate all text node values in an IR tree. */
-function collectText(nodes: IRNode[]): string {
+function collectText(nodes: BotNode[]): string {
   let out = "";
   for (const n of nodes) {
     if (n.type === "text" && typeof n.props.value === "string") out += n.props.value;
     const children = n.props.children;
-    if (Array.isArray(children)) out += collectText(children as IRNode[]);
+    if (Array.isArray(children)) out += collectText(children as BotNode[]);
   }
   return out;
 }

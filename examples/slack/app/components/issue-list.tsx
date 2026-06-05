@@ -21,7 +21,7 @@ import {
   Header,
   Message,
   Section,
-  type IRNode,
+  type BotNode,
 } from "@copilotkit/bot-ui";
 import { accentForIssues, stateShortcode } from "./_status.js";
 
@@ -64,7 +64,7 @@ const MAX = 15;
 const TITLE_MAX = 70;
 
 /** Render a list of Linear issues as a compact, fixed-size Block Kit card. */
-export function IssueList({ heading, issues }: IssueListProps): IRNode {
+export function IssueList({ heading, issues }: IssueListProps): BotNode {
   const lines = issues.slice(0, MAX).map((issue: Issue) => {
     const idLink = issue.url
       ? `[**${issue.identifier}**](${issue.url})`

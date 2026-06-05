@@ -1,5 +1,5 @@
 import type { AgentSubscriber, AbstractAgent } from "@ag-ui/client";
-import type { IRNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
+import type { BotNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
 
 /** Opaque to the bot core — created by an adapter during ingress and passed back to post/createRunRenderer. */
 export type ReplyTarget = unknown;
@@ -81,9 +81,9 @@ export interface PlatformAdapter {
   readonly ackDeadlineMs: number;
   start(sink: IngressSink): Promise<void>;
   stop(): Promise<void>;
-  render(ir: IRNode[]): NativePayload;
-  post(target: ReplyTarget, ir: IRNode[]): Promise<MessageRef>;
-  update(ref: MessageRef, ir: IRNode[]): Promise<void>;
+  render(ir: BotNode[]): NativePayload;
+  post(target: ReplyTarget, ir: BotNode[]): Promise<MessageRef>;
+  update(ref: MessageRef, ir: BotNode[]): Promise<void>;
   stream(target: ReplyTarget, chunks: AsyncIterable<string>): Promise<MessageRef>;
   delete(ref: MessageRef): Promise<void>;
   createRunRenderer(target: ReplyTarget): RunRenderer;

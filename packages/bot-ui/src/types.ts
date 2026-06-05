@@ -7,8 +7,12 @@ export interface Thread {
   post(ui: unknown): Promise<MessageRef>;
   update(ref: MessageRef, ui: unknown): Promise<MessageRef>;
   delete(ref: MessageRef): Promise<void>;
-  /** Post a picker and block until an interaction resolves it to the clicked button's `value`. */
-  awaitChoice(ui: unknown): Promise<unknown>;
+  /**
+   * Post a picker and block until an interaction resolves it to the clicked
+   * button's `value`. Pass the expected value type, e.g.
+   * `awaitChoice<{ confirmed: boolean }>(<Picker/>)`.
+   */
+  awaitChoice<T = unknown>(ui: unknown): Promise<T>;
   runAgent(input?: unknown): Promise<MessageRef | undefined>;
   resume(value: unknown): Promise<MessageRef | undefined>;
   stream(src: string | AsyncIterable<string>): Promise<MessageRef>;
@@ -18,9 +22,10 @@ export interface Thread {
   /** Resolve a platform user by a free-form query (capability-gated; returns `undefined` when unsupported). */
   lookupUser(query: string): Promise<PlatformUser | undefined>;
 }
-export interface InteractionContext {
+export interface InteractionContext<TValue = unknown> {
   thread: Thread; message: IncomingMessage;
-  action: { id: string; value?: unknown };
+  /** The clicked control: its opaque `id` and the `value` it carried (typed as `TValue`). */
+  action: { id: string; value?: TValue };
   values: Record<string, unknown>; user: PlatformUser; platform: string;
 }
-export type ClickHandler = (ctx: InteractionContext) => void | Promise<void>;
+export type ClickHandler<TValue = unknown> = (ctx: InteractionContext<TValue>) => void | Promise<void>;

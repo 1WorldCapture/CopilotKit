@@ -1,5 +1,5 @@
 import type { AgentSubscriber } from "@ag-ui/client";
-import type { IRNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
+import type { BotNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
 import type {
   PlatformAdapter, SurfaceCapabilities, IngressSink, IncomingTurn,
   InteractionEvent, RunRenderer, CapturedToolCall, CapturedInterrupt,
@@ -49,8 +49,8 @@ export class FakeAdapter implements PlatformAdapter {
     },
   };
 
-  posted: IRNode[][] = [];
-  updated: { ref: MessageRef; ir: IRNode[] }[] = [];
+  posted: BotNode[][] = [];
+  updated: { ref: MessageRef; ir: BotNode[] }[] = [];
   interactionsSeen: InteractionEvent[] = [];
   lastRunRenderer?: RunRenderer;
   /** History returned by getMessages(); override in tests. */
@@ -65,14 +65,14 @@ export class FakeAdapter implements PlatformAdapter {
   }
   async stop(): Promise<void> {}
 
-  render(ir: IRNode[]): NativePayload {
+  render(ir: BotNode[]): NativePayload {
     return ir;
   }
-  async post(_target: ReplyTarget, ir: IRNode[]): Promise<MessageRef> {
+  async post(_target: ReplyTarget, ir: BotNode[]): Promise<MessageRef> {
     this.posted.push(ir);
     return { id: `msg-${++this.counter}` };
   }
-  async update(ref: MessageRef, ir: IRNode[]): Promise<void> {
+  async update(ref: MessageRef, ir: BotNode[]): Promise<void> {
     this.updated.push({ ref, ir });
   }
   async stream(_target: ReplyTarget, chunks: AsyncIterable<string>): Promise<MessageRef> {

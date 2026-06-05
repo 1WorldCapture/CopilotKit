@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderToIR, type IRNode } from "@copilotkit/bot-ui";
+import { renderToIR, type BotNode } from "@copilotkit/bot-ui";
 import { renderSlackMessage } from "@copilotkit/bot-slack";
 import { confirmWriteTool } from "../confirm-write-tool.js";
 
@@ -28,7 +28,7 @@ describe("confirm_write tool", () => {
 
     // The posted UI is a ConfirmWrite picker: amber accent + header carrying the action.
     expect(awaited).toHaveLength(1);
-    const { blocks, accent } = renderSlackMessage(renderToIR(awaited[0] as IRNode));
+    const { blocks, accent } = renderSlackMessage(renderToIR(awaited[0] as BotNode));
     expect(accent).toBe("#E2B340");
     const header = blocks.find((b) => b.type === "header") as { text: { text: string } } | undefined;
     expect(header?.text.text).toContain("Create Linear issue");

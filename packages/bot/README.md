@@ -44,10 +44,11 @@ await bot.start();
   `{ thread, message }`. (Routing is mention-preferred: if any mention
   handler is registered, all turns route to it; otherwise message handlers
   fire.)
-- `onInteraction(id, handler)` — explicit escape-hatch handler for a known
-  action id, bypassing the registry.
-- `onInterrupt(eventName, handler)` — handle a captured agent interrupt
-  (LangGraph-style `on_interrupt`); receives `{ payload, thread }`.
+- `onInteraction<TValue>(id, handler)` — explicit escape-hatch handler for a
+  known action id, bypassing the registry; `ctx.action.value` is typed `TValue`.
+- `onInterrupt<TPayload>(eventName, handler)` — handle a captured agent
+  interrupt (LangGraph-style `on_interrupt`); receives `{ payload, thread }`
+  with `payload` typed `TPayload`.
 - `tool(t)` — register a `BotTool` (alternative to `opts.tools`); must be
   added before `start()`.
 - `start()` / `stop()` — bring adapters up / down.
@@ -69,7 +70,7 @@ interface Thread {
   stream(src: string | AsyncIterable<string>): Promise<MessageRef>;
   runAgent(input?: { context?: ContextEntry[]; tools?: BotTool[] }): Promise<MessageRef | undefined>;
   resume(value: unknown): Promise<MessageRef | undefined>;
-  awaitChoice(ui: Renderable): Promise<unknown>;
+  awaitChoice<T = unknown>(ui: Renderable): Promise<T>;
 }
 ```
 
@@ -81,8 +82,9 @@ interface Thread {
   `context` are merged on top of the bot-level defaults for that run only.
 - `resume(value)` re-enters a paused interrupt run with
   `forwardedProps.command`.
-- `awaitChoice(ui)` posts a picker and blocks until an interaction in this
-  conversation resolves it to the clicked control's value (HITL).
+- `awaitChoice<T>(ui)` posts a picker and blocks until an interaction in this
+  conversation resolves it to the clicked control's value (HITL); pass `T` to
+  type the returned value.
 
 ## Tools & context
 
@@ -149,7 +151,7 @@ To target a new surface, implement `PlatformAdapter` from this package. The
 engine drives ingress through the `IngressSink` you receive in `start(sink)`
 (`sink.onTurn(IncomingTurn)` / `sink.onInteraction(InteractionEvent)`) and
 egress through your `post` / `update` / `stream` / `delete` (which receive
-`IRNode[]` to translate to a native payload via `render`). You also provide
+`BotNode[]` to translate to a native payload via `render`). You also provide
 `createRunRenderer(target)` (an AG-UI `RunRenderer`: the subscriber to stream
 into, plus accessors for captured tool calls and interrupts that the run-loop
 reads after each `runAgent`), `decodeInteraction(raw)` (native event → opaque

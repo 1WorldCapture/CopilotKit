@@ -27,10 +27,19 @@ export interface CreateBotOptions {
 export interface Bot {
   onMention(h: BotHandler): void;
   onMessage(h: BotHandler): void;
-  onInteraction(id: string, h: (ctx: InteractionContext) => void | Promise<void>): void;
-  onInterrupt(
+  /** Handle clicks on a specific action `id`. `ctx.action.value` is typed as `TValue`. */
+  onInteraction<TValue = unknown>(
+    id: string,
+    h: (ctx: InteractionContext<TValue>) => void | Promise<void>,
+  ): void;
+  /**
+   * Handle an agent interrupt (an `on_interrupt` custom event). `payload` is the
+   * event's value; pass `TPayload` to type it, e.g.
+   * `onInterrupt<{ question: string }>("ask", ...)`.
+   */
+  onInterrupt<TPayload = unknown>(
     eventName: string,
-    h: (args: { payload: unknown; thread: Thread }) => void | Promise<void>,
+    h: (args: { payload: TPayload; thread: Thread }) => void | Promise<void>,
   ): void;
   tool(t: BotTool): void;
   start(): Promise<void>;
@@ -141,11 +150,20 @@ export function createBot(opts: CreateBotOptions): Bot {
     onMessage(h) {
       messageHandlers.push(h);
     },
-    onInteraction(id, h) {
-      interactionHandlers.set(id, h);
+    onInteraction<TValue = unknown>(
+      id: string,
+      h: (ctx: InteractionContext<TValue>) => void | Promise<void>,
+    ) {
+      interactionHandlers.set(id, h as (ctx: InteractionContext) => void | Promise<void>);
     },
-    onInterrupt(eventName, h) {
-      interruptHandlers.set(eventName, h);
+    onInterrupt<TPayload = unknown>(
+      eventName: string,
+      h: (args: { payload: TPayload; thread: Thread }) => void | Promise<void>,
+    ) {
+      interruptHandlers.set(
+        eventName,
+        h as (args: { payload: unknown; thread: Thread }) => void | Promise<void>,
+      );
     },
     tool(t) {
       toolMap.set(t.name, t);

@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { renderToIR } from "@copilotkit/bot-ui";
-import type { IRNode, InteractionContext, ClickHandler } from "@copilotkit/bot-ui";
+import type { BotNode, InteractionContext, ClickHandler } from "@copilotkit/bot-ui";
 import { renderSlackMessage } from "@copilotkit/bot-slack";
 import {
   showIncidentTool,
@@ -38,14 +38,14 @@ function fakeThread() {
 }
 
 /** Depth-first: find the first IR node whose `type` matches and that has the named prop. */
-function findWithProp(nodes: IRNode[], type: string, prop: string): IRNode | undefined {
+function findWithProp(nodes: BotNode[], type: string, prop: string): BotNode | undefined {
   for (const node of nodes) {
     if (node.type === type && node.props && prop in node.props) return node;
     const children = node.props?.children;
     const childArr = Array.isArray(children)
-      ? (children as IRNode[])
+      ? (children as BotNode[])
       : children && typeof children === "object"
-        ? [children as IRNode]
+        ? [children as BotNode]
         : [];
     const found = findWithProp(childArr, type, prop);
     if (found) return found;

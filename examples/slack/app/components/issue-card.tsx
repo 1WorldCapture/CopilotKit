@@ -19,7 +19,7 @@ import {
   Header,
   Message,
   Section,
-  type IRNode,
+  type BotNode,
 } from "@copilotkit/bot-ui";
 import {
   accentForIssue,
@@ -56,7 +56,7 @@ export const issueCardSchema = z.object({
 export type IssueCardProps = z.infer<typeof issueCardSchema>;
 
 /** Render ONE Linear issue as a rich Block Kit card. */
-export function IssueCard(issue: IssueCardProps): IRNode {
+export function IssueCard(issue: IssueCardProps): BotNode {
   const titleText = issue.url
     ? `[**${issue.title}**](${issue.url})`
     : `**${issue.title}**`;

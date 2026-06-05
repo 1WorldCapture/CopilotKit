@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { ActionRegistry, ActionExpiredError } from "./action-registry.js";
 import { InMemoryActionStore } from "./action-store.js";
-import type { IRNode, InteractionContext } from "@copilotkit/bot-ui";
+import type { BotNode, InteractionContext } from "@copilotkit/bot-ui";
 
-function Confirm(props: { action: string }): IRNode {
+function Confirm(props: { action: string }): BotNode {
   return {
     type: "actions",
     props: {
@@ -27,7 +27,7 @@ describe("ActionRegistry", () => {
     const reg = new ActionRegistry({ store: new InMemoryActionStore() });
     reg.registerComponent("Confirm", Confirm as never);
     const ir = await reg.bindTree("Confirm", { action: "write" }, "conv1");
-    const button = (ir[0]!.props.children as IRNode[])[0]!;
+    const button = (ir[0]!.props.children as BotNode[])[0]!;
     const id = (button.props.onClick as { id: string }).id;
     expect(typeof id).toBe("string");
     const out = await reg.dispatch(id, ctx);
@@ -38,7 +38,7 @@ describe("ActionRegistry", () => {
     const reg = new ActionRegistry({ store: new InMemoryActionStore() });
     reg.registerComponent("Confirm", Confirm as never);
     const ir = await reg.bindTree("Confirm", { action: "write" }, "conv1");
-    const id = ((ir[0]!.props.children as IRNode[])[0]!.props.onClick as { id: string }).id;
+    const id = ((ir[0]!.props.children as BotNode[])[0]!.props.onClick as { id: string }).id;
     reg.clearHotCache();
     const out = await reg.dispatch(id, ctx);
     expect(out).toContain("ok:write:");

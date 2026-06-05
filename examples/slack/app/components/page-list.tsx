@@ -15,7 +15,7 @@ import {
   Header,
   Message,
   Section,
-  type IRNode,
+  type BotNode,
 } from "@copilotkit/bot-ui";
 import { ACCENT } from "./_status.js";
 
@@ -45,8 +45,8 @@ export type PageListProps = z.infer<typeof pageListSchema>;
 type Page = z.infer<typeof pageSchema>;
 
 /** Render a list of Notion pages as a Block Kit card. */
-export function PageList({ heading, pages }: PageListProps): IRNode {
-  const rows: IRNode[] = [];
+export function PageList({ heading, pages }: PageListProps): BotNode {
+  const rows: BotNode[] = [];
   pages.forEach((page: Page, i: number) => {
     const titleLink = page.url
       ? `[**${page.title}**](${page.url})`

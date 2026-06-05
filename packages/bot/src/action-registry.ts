@@ -1,5 +1,5 @@
 import type {
-  IRNode,
+  BotNode,
   ClickHandler,
   InteractionContext,
   ComponentFn,
@@ -49,7 +49,7 @@ export class ActionRegistry {
     componentName: string,
     props: Record<string, unknown>,
     conversationKey: string,
-  ): Promise<IRNode[]> {
+  ): Promise<BotNode[]> {
     const fn = this.components.get(componentName);
     const root = renderToIR((fn ? fn(props) : props) as Renderable);
     await this.walk(root, [], componentName, props, conversationKey);
@@ -61,7 +61,7 @@ export class ActionRegistry {
   // re-render supported). Otherwise the IR is bound inline with `component:""`,
   // meaning a cold-cache dispatch throws ActionExpiredError (intended
   // degradation for inline handlers that can't be re-derived).
-  async bindRenderable(ui: Renderable, conversationKey: string): Promise<IRNode[]> {
+  async bindRenderable(ui: Renderable, conversationKey: string): Promise<BotNode[]> {
     if (isComponentElement(ui)) {
       const fn = ui.type;
       const name = fn.name || "anonymous";
@@ -74,7 +74,7 @@ export class ActionRegistry {
   }
 
   private async walk(
-    nodes: IRNode[],
+    nodes: BotNode[],
     base: (string | number)[],
     comp: string,
     props: unknown,
@@ -101,7 +101,7 @@ export class ActionRegistry {
       }
       const children = node.props.children;
       if (Array.isArray(children)) {
-        await this.walk(children as IRNode[], [...path, "children"], comp, props, conv);
+        await this.walk(children as BotNode[], [...path, "children"], comp, props, conv);
       }
     }
   }
@@ -121,15 +121,15 @@ export class ActionRegistry {
   }
 }
 
-function pluck(tree: IRNode[], path: (string | number)[]): ClickHandler | undefined {
+function pluck(tree: BotNode[], path: (string | number)[]): ClickHandler | undefined {
   let cur: unknown = tree;
   for (const seg of path.slice(0, -1)) {
     if (Array.isArray(cur)) cur = cur[seg as number];
-    else if (cur && typeof cur === "object") cur = (cur as IRNode).props?.[seg as string];
+    else if (cur && typeof cur === "object") cur = (cur as BotNode).props?.[seg as string];
     else return undefined;
   }
   const ep = path[path.length - 1] as string;
-  const node = cur as IRNode | undefined;
+  const node = cur as BotNode | undefined;
   const h = node?.props?.[ep];
   return typeof h === "function" ? (h as ClickHandler) : undefined;
 }

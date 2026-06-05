@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { SlackAdapter } from "./adapter.js";
-import type { IRNode } from "@copilotkit/bot-ui";
+import type { BotNode } from "@copilotkit/bot-ui";
 import type { InteractionEvent, IngressSink } from "@copilotkit/bot";
 
 /**
@@ -24,7 +24,7 @@ function makeAdapter() {
   return { adapter, chat };
 }
 
-const section = (text: string): IRNode => ({
+const section = (text: string): BotNode => ({
   type: "section",
   props: { children: [{ type: "text", props: { value: text } }] },
 });
@@ -57,7 +57,7 @@ describe("SlackAdapter.post", () => {
 
   it("renders a <Message accent> as a colored attachment with a short top-level text and NO fallback on the attachment", async () => {
     const { adapter, chat } = makeAdapter();
-    const header = (text: string): IRNode => ({
+    const header = (text: string): BotNode => ({
       type: "header",
       props: { children: [{ type: "text", props: { value: text } }] },
     });
@@ -98,7 +98,7 @@ describe("SlackAdapter.post", () => {
 
   it("uses the header as the short fallback summary — not a dump of the whole card", async () => {
     const { adapter, chat } = makeAdapter();
-    const header = (text: string): IRNode => ({
+    const header = (text: string): BotNode => ({
       type: "header",
       props: { children: [{ type: "text", props: { value: text } }] },
     });
@@ -141,7 +141,7 @@ describe("SlackAdapter.update / delete use the stashed channel", () => {
 
   it("update of an accent card sets a short top-level text and attachments with NO fallback", async () => {
     const { adapter, chat } = makeAdapter();
-    const header = (text: string): IRNode => ({
+    const header = (text: string): BotNode => ({
       type: "header",
       props: { children: [{ type: "text", props: { value: text } }] },
     });

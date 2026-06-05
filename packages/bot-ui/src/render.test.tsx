@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { renderToIR } from "./render.js";
-import type { IRNode } from "./ir.js";
+import type { BotNode } from "./ir.js";
 
-function Card(props: { title: string }): IRNode {
+function Card(props: { title: string }): BotNode {
   return { type: "section", props: { children: props.title } };
 }
 
@@ -16,12 +16,12 @@ describe("renderToIR", () => {
   });
   it("flattens Fragment children and nested components", () => {
     const out = renderToIR(<><Card title="A" /><Card title="B" /></>);
-    expect(out.map((n) => (n as IRNode).type)).toEqual(["section", "section"]);
+    expect(out.map((n) => (n as BotNode).type)).toEqual(["section", "section"]);
   });
   it("wraps string children inside intrinsic nodes recursively", () => {
     const out = renderToIR({ type: "actions", props: { children: ["x"] } });
-    const actions = out[0] as IRNode;
-    expect((actions.props.children as IRNode[])[0]).toEqual({ type: "text", props: { value: "x" } });
+    const actions = out[0] as BotNode;
+    expect((actions.props.children as BotNode[])[0]).toEqual({ type: "text", props: { value: "x" } });
   });
   it("passes {raw} through as a raw node", () => {
     expect(renderToIR({ raw: [{ block: 1 }] })).toEqual([{ type: "raw", props: { value: [{ block: 1 }] } }]);
