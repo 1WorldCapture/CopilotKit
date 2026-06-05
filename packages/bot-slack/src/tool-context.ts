@@ -19,12 +19,6 @@ export interface SlackToolContext {
   senderUserId?: string;
   conversationKey?: string;
   signal?: AbortSignal;
-  postFile?(args: {
-    bytes: Uint8Array;
-    filename: string;
-    title?: string;
-    altText?: string;
-  }): Promise<{ ok: boolean; fileId?: string; error?: string }>;
 }
 
 /** A BotTool whose handler ctx carries the Slack tool context. */

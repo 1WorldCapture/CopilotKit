@@ -57,6 +57,19 @@ export class Thread implements ThreadInterface {
     return this.deps.adapter.stream(this.deps.replyTarget, iter);
   }
 
+  async postFile(args: {
+    bytes: Uint8Array;
+    filename: string;
+    title?: string;
+    altText?: string;
+  }): Promise<{ ok: boolean; fileId?: string; error?: string }> {
+    const adapter = this.deps.adapter;
+    if (!adapter.postFile) {
+      return { ok: false, error: `${this.platform} does not support file upload` };
+    }
+    return adapter.postFile(this.deps.replyTarget, args);
+  }
+
   /** Post a picker and wait until an interaction in this conversation resolves it. */
   async awaitChoice(ui: Renderable): Promise<unknown> {
     const p = new Promise<unknown>((resolve) =>

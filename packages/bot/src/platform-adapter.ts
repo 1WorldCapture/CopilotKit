@@ -97,4 +97,10 @@ export interface PlatformAdapter {
    * into the tool-call context so platform tools can act on the surface.
    */
   toolContext?(replyTarget: ReplyTarget): Record<string, unknown>;
+  /**
+   * Optional platform file upload. Threads expose `postFile` unconditionally;
+   * adapters that can't upload simply omit this, and `Thread.postFile` returns
+   * a capability-gated `{ ok: false, error }`.
+   */
+  postFile?(target: ReplyTarget, args: { bytes: Uint8Array; filename: string; title?: string; altText?: string }): Promise<{ ok: boolean; fileId?: string; error?: string }>;
 }

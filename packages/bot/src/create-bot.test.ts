@@ -123,6 +123,26 @@ describe("createBot", () => {
     expect(seenTools).toEqual([]);
   });
 
+  it("thread.postFile returns a capability-gated error when the adapter can't upload", async () => {
+    const fake = new FakeAdapter();
+    const agent = new FakeAgent();
+    const bot = createBot({ adapters: [fake], agent: () => agent });
+
+    let result: { ok: boolean; error?: string } | undefined;
+    bot.onMention(async ({ thread }) => {
+      result = await thread.postFile({
+        bytes: new Uint8Array([1, 2, 3]),
+        filename: "x.png",
+      });
+    });
+
+    await bot.start();
+    fake.emitTurn({ userText: "hi", conversationKey: "c1" });
+    await tick();
+
+    expect(result).toEqual({ ok: false, error: "fake does not support file upload" });
+  });
+
   it("resolves awaitChoice when a matching interaction arrives", async () => {
     const fake = new FakeAdapter();
     const agent = new FakeAgent();

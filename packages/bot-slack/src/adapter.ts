@@ -347,29 +347,39 @@ export class SlackAdapter implements PlatformAdapter {
       channel: t.channel,
       threadTs: t.threadTs,
       botUserId: this.botUserId,
-      postFile: async ({ bytes, filename, title, altText }) => {
-        try {
-          // Slack's `FilesUploadV2Arguments` union types `thread_ts` as a
-          // required `string` when present; omit the key entirely (rather
-          // than passing `undefined`) under exactOptionalPropertyTypes.
-          const args: Record<string, unknown> = {
-            channel_id: t.channel,
-            file: Buffer.from(bytes),
-            filename,
-            title,
-            alt_text: altText,
-          };
-          if (t.threadTs) args.thread_ts = t.threadTs;
-          await this.client.files.uploadV2(
-            args as unknown as Parameters<WebClient["files"]["uploadV2"]>[0],
-          );
-          return { ok: true };
-        } catch (e) {
-          return { ok: false, error: (e as Error).message };
-        }
-      },
     };
     return ctx as unknown as Record<string, unknown>;
+  }
+
+  async postFile(
+    target: BotReplyTarget,
+    {
+      bytes,
+      filename,
+      title,
+      altText,
+    }: { bytes: Uint8Array; filename: string; title?: string; altText?: string },
+  ): Promise<{ ok: boolean; fileId?: string; error?: string }> {
+    const t = target as ReplyTarget;
+    try {
+      // Slack's `FilesUploadV2Arguments` union types `thread_ts` as a
+      // required `string` when present; omit the key entirely (rather
+      // than passing `undefined`) under exactOptionalPropertyTypes.
+      const args: Record<string, unknown> = {
+        channel_id: t.channel,
+        file: Buffer.from(bytes),
+        filename,
+        title,
+        alt_text: altText,
+      };
+      if (t.threadTs) args.thread_ts = t.threadTs;
+      await this.client.files.uploadV2(
+        args as unknown as Parameters<WebClient["files"]["uploadV2"]>[0],
+      );
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   }
 }
 

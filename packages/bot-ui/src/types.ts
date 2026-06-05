@@ -11,6 +11,7 @@ export interface Thread {
   runAgent(input?: unknown): Promise<MessageRef | undefined>;
   resume(value: unknown): Promise<MessageRef | undefined>;
   stream(src: string | AsyncIterable<string>): Promise<MessageRef>;
+  postFile(args: { bytes: Uint8Array; filename: string; title?: string; altText?: string }): Promise<{ ok: boolean; fileId?: string; error?: string }>;
 }
 export interface InteractionContext {
   thread: Thread; message: IncomingMessage;

@@ -1,7 +1,7 @@
 /**
  * `render_chart` — the agent emits a Chart.js config; we render it to a PNG
  * locally (headless Chromium) and deliver it to the thread via the SDK's
- * `ctx.postFile`. Slack shows the image inline. This is the "upload a CSV →
+ * `ctx.thread.postFile`. Slack shows the image inline. This is the "upload a CSV →
  * get a chart" payoff: the agent parses the data, then calls this. After the
  * upload we also post a small JSX caption card (`<Context>`) so the tool
  * doubles as a render-tool demo.
@@ -87,12 +87,9 @@ export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
     } else {
       spec = chartSpec as Record<string, unknown>;
     }
-    if (!ctx.postFile) {
-      return "Chart render failed: file delivery unavailable";
-    }
     try {
       const png = await renderChart(spec);
-      const res = await ctx.postFile({
+      const res = await ctx.thread.postFile({
         bytes: png,
         filename: `${slug(title ?? "chart")}.png`,
         title: title ?? "Chart",

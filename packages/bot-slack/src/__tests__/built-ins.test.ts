@@ -82,7 +82,6 @@ function makeCtx(): {
     threadTs: "100.0",
     botUserId: "BOT01",
     conversationKey: "C1::100.0",
-    postFile: async () => ({ ok: true }),
   };
   return { ctx: ctx as HandlerCtx, listFn };
 }
@@ -170,7 +169,6 @@ describe("lookup_slack_user", () => {
       channel: "C1",
       botUserId: "BOT01",
       conversationKey: "C1::100.0",
-      postFile: async () => ({ ok: true }),
     };
     const r = JSON.parse(
       (await lookupSlackUserTool.handler(

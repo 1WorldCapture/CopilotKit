@@ -1,6 +1,6 @@
 /**
  * `render_diagram` — the agent emits Mermaid source; we render it to a PNG
- * locally (headless Chromium) and deliver it to the thread via `ctx.postFile`.
+ * locally (headless Chromium) and deliver it to the thread via `ctx.thread.postFile`.
  * On invalid Mermaid the tool returns the parser error so the agent can fix
  * and retry rather than posting a broken image. After a successful upload we
  * also post a small JSX caption card (`<Context>`) so the tool doubles as a
@@ -42,12 +42,9 @@ export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
     "a flow, architecture, or incident timeline. The image renders inline.",
   parameters: schema,
   async handler({ title, mermaid }, ctx) {
-    if (!ctx.postFile) {
-      return "Diagram render failed: file delivery unavailable. Fix the Mermaid syntax and retry.";
-    }
     try {
       const png = await renderDiagram(mermaid);
-      const res = await ctx.postFile({
+      const res = await ctx.thread.postFile({
         bytes: png,
         filename: `${slug(title ?? "diagram")}.png`,
         title: title ?? "Diagram",

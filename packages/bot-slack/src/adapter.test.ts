@@ -191,18 +191,84 @@ describe("SlackAdapter.decodeInteraction", () => {
 });
 
 describe("SlackAdapter.toolContext", () => {
-  it("returns a SlackToolContext carrying client/channel/botUserId/postFile", () => {
+  it("returns a SlackToolContext carrying client/channel/botUserId (no postFile)", () => {
     const { adapter } = makeAdapter();
     const ctx = adapter.toolContext({ channel: "C1", threadTs: "100.0" }) as {
       client: unknown;
       channel: string;
       botUserId: string;
-      postFile: unknown;
+      postFile?: unknown;
     };
     expect(ctx.client).toBeDefined();
     expect(ctx.channel).toBe("C1");
     expect(ctx.botUserId).toBe("UBOT");
-    expect(typeof ctx.postFile).toBe("function");
+    // File upload moved onto the platform-agnostic Thread.postFile / adapter.postFile.
+    expect(ctx.postFile).toBeUndefined();
+  });
+});
+
+describe("SlackAdapter.postFile", () => {
+  it("uploads via files.uploadV2 with channel_id/thread_ts/file and returns ok", async () => {
+    const { adapter } = makeAdapter();
+    const uploadV2 = vi.fn(async (_arg: Record<string, unknown>) => ({ ok: true }));
+    (adapter as unknown as { client: { files: unknown } }).client = {
+      files: { uploadV2 },
+    };
+
+    const res = await adapter.postFile(
+      { channel: "C1", threadTs: "100.0" },
+      { bytes: new Uint8Array([1, 2, 3]), filename: "chart.png", title: "Chart", altText: "alt" },
+    );
+
+    expect(res).toEqual({ ok: true });
+    expect(uploadV2).toHaveBeenCalledTimes(1);
+    const arg = uploadV2.mock.calls[0]![0] as {
+      channel_id: string;
+      thread_ts?: string;
+      filename: string;
+      title?: string;
+      alt_text?: string;
+      file: unknown;
+    };
+    expect(arg.channel_id).toBe("C1");
+    expect(arg.thread_ts).toBe("100.0");
+    expect(arg.filename).toBe("chart.png");
+    expect(arg.title).toBe("Chart");
+    expect(arg.alt_text).toBe("alt");
+    expect(Buffer.isBuffer(arg.file)).toBe(true);
+  });
+
+  it("omits thread_ts when the target has none", async () => {
+    const { adapter } = makeAdapter();
+    const uploadV2 = vi.fn(async (_arg: Record<string, unknown>) => ({ ok: true }));
+    (adapter as unknown as { client: { files: unknown } }).client = {
+      files: { uploadV2 },
+    };
+
+    await adapter.postFile(
+      { channel: "C1" },
+      { bytes: new Uint8Array([1]), filename: "x.png" },
+    );
+
+    const arg = uploadV2.mock.calls[0]![0] as { thread_ts?: string };
+    expect(arg.thread_ts).toBeUndefined();
+  });
+
+  it("returns ok:false with the error message when uploadV2 throws", async () => {
+    const { adapter } = makeAdapter();
+    const uploadV2 = vi.fn(async () => {
+      throw new Error("upload_failed");
+    });
+    (adapter as unknown as { client: { files: unknown } }).client = {
+      files: { uploadV2 },
+    };
+
+    const res = await adapter.postFile(
+      { channel: "C1" },
+      { bytes: new Uint8Array([1]), filename: "x.png" },
+    );
+
+    expect(res).toEqual({ ok: false, error: "upload_failed" });
   });
 });
 

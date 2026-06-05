@@ -22,6 +22,7 @@ function makeCtx() {
       posts.push(ui);
       return { id: "m1" };
     }),
+    postFile,
   };
   const ctx = {
     client: {} as never,
@@ -29,7 +30,6 @@ function makeCtx() {
     threadTs: "100.0",
     botUserId: "BOT",
     conversationKey: "C1::100.0",
-    postFile,
     thread,
   } as unknown as HandlerCtx;
   return { ctx, postFile, thread, posts };
