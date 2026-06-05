@@ -19,11 +19,11 @@ import { IssueCard } from "../issue-card.js";
 import { PageList } from "../page-list.js";
 
 describe("IssueList component", () => {
-  it("renders a header, a status row and a meta line per issue", () => {
+  it("renders a header, a status table and a count footer", () => {
     const { blocks, accent } = renderSlackMessage(
       renderToIR(
         <IssueList
-          heading="Open CPK issues"
+          heading="Open"
           issues={[
             {
               identifier: "CPK-101",
@@ -34,57 +34,90 @@ describe("IssueList component", () => {
               priority: "Urgent",
               updated: "2d ago",
             },
+            {
+              identifier: "CPK-9",
+              title: "No assignee",
+            },
           ]}
         />,
       ),
     );
 
-    const json = JSON.stringify(blocks);
-    // Leads with a header block carrying the list emoji + heading.
+    // Leads with a plain header carrying the heading.
     expect(blocks[0]).toMatchObject({
       type: "header",
-      text: { type: "plain_text", text: "📋  Open CPK issues" },
+      text: { type: "plain_text", text: "Open" },
     });
-    // The identifier is a linked, bold label (Markdown bold → Slack bold).
-    expect(json).toContain(
-      "<https://linear.app/copilotkit/issue/CPK-101|*CPK-101*>",
-    );
-    expect(json).toContain("Checkout 500s under load");
-    // In-progress maps to the blue dot; Urgent to the siren.
-    expect(json).toContain(":large_blue_circle:");
-    expect(json).toContain(":rotating_light:");
-    expect(json).toContain("Alem");
+
+    // A single native table block.
+    const table = blocks.find((b) => b.type === "table") as {
+      rows: { type: "raw_text"; text: string }[][];
+      column_settings: { align: string }[];
+    };
+    expect(table).toBeDefined();
+
+    // Header row: empty status col + Issue / Title / Assignee / Updated.
+    expect(table.rows[0]).toEqual([
+      { type: "raw_text", text: "" },
+      { type: "raw_text", text: "Issue" },
+      { type: "raw_text", text: "Title" },
+      { type: "raw_text", text: "Assignee" },
+      { type: "raw_text", text: "Updated" },
+    ]);
+
+    // One data row per issue: status unicode + identifier + title + assignee + updated.
+    expect(table.rows[1]).toEqual([
+      { type: "raw_text", text: "🔵" },
+      { type: "raw_text", text: "CPK-101" },
+      { type: "raw_text", text: "Checkout 500s under load" },
+      { type: "raw_text", text: "Alem" },
+      { type: "raw_text", text: "2d ago" },
+    ]);
+    // Missing state → orange dot; missing assignee → em dash; missing updated → "".
+    expect(table.rows[2]).toEqual([
+      { type: "raw_text", text: "🟠" },
+      { type: "raw_text", text: "CPK-9" },
+      { type: "raw_text", text: "No assignee" },
+      { type: "raw_text", text: "—" },
+      { type: "raw_text", text: "" },
+    ]);
+    expect(table.rows).toHaveLength(3);
+
+    // Column alignment: status centered, updated right-aligned, rest left.
+    expect(table.column_settings).toEqual([
+      { align: "center" },
+      { align: "left" },
+      { align: "left" },
+      { align: "left" },
+      { align: "right" },
+    ]);
+
     // Count footer.
-    expect(json).toContain("1 issue");
+    const footer = blocks.at(-1);
+    expect(footer?.type).toBe("context");
+    expect(JSON.stringify(footer)).toContain("2 issues");
+
     // Hottest priority (Urgent) drives the accent.
     expect(accent).toBe("#EB5757");
   });
 
-  it("puts a divider between issues but not after the last", () => {
-    const { blocks } = renderSlackMessage(
-      renderToIR(
-        <IssueList
-          issues={[
-            { identifier: "CPK-1", title: "a" },
-            { identifier: "CPK-2", title: "b" },
-          ]}
-        />,
-      ),
-    );
-    expect(blocks.filter((b) => b.type === "divider")).toHaveLength(1);
-  });
-
-  it("falls back to an emphasized identifier and 'unassigned' when fields are missing", () => {
+  it("truncates long titles and falls back to Linear purple without urgent/high", () => {
+    const long = "x".repeat(60);
     const { blocks, accent } = renderSlackMessage(
       renderToIR(
-        <IssueList issues={[{ identifier: "CPK-9", title: "No assignee" }]} />,
+        <IssueList issues={[{ identifier: "CPK-1", title: long }]} />,
       ),
     );
-    const json = JSON.stringify(blocks);
-    // No url → bold identifier, no link wrapper.
-    expect(json).toContain("*CPK-9*");
-    expect(json).not.toContain("|*CPK-9*>");
-    expect(json).toContain("unassigned");
+    const table = blocks.find((b) => b.type === "table") as {
+      rows: { type: "raw_text"; text: string }[][];
+    };
+    // Title clamped to 48 chars (47 + ellipsis).
+    expect(table.rows[1]?.[2]).toEqual({
+      type: "raw_text",
+      text: `${"x".repeat(47)}…`,
+    });
+    // Singular footer.
+    expect(JSON.stringify(blocks)).toContain("1 issue");
     // No urgent/high priority → Linear purple.
     expect(accent).toBe("#5E6AD2");
   });
