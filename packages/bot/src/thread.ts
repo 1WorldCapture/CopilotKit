@@ -95,6 +95,12 @@ export class Thread implements ThreadInterface {
   async runAgent(input?: {
     context?: ContextEntry[];
     tools?: BotTool[];
+    /**
+     * A user message to inject before running. Needed when the input isn't
+     * already in the conversation history the adapter reconstructs — e.g. a
+     * slash command, whose args are never posted to the channel.
+     */
+    prompt?: string;
   }): Promise<MessageRef | undefined> {
     return this.run(undefined, input);
   }
@@ -105,13 +111,22 @@ export class Thread implements ThreadInterface {
 
   private async run(
     initialResume?: { resume: unknown },
-    extra?: { context?: ContextEntry[]; tools?: BotTool[] },
+    extra?: { context?: ContextEntry[]; tools?: BotTool[]; prompt?: string },
   ): Promise<MessageRef | undefined> {
     const session = await this.deps.adapter.conversationStore.getOrCreate(
       this.deps.conversationKey,
       this.deps.replyTarget,
       this.deps.agentFactory,
     );
+    // Inject an explicit user message when the input isn't in the adapter's
+    // reconstructed history (e.g. a slash command's args).
+    if (extra?.prompt) {
+      session.agent.addMessage({
+        id: globalThis.crypto.randomUUID(),
+        role: "user",
+        content: extra.prompt,
+      });
+    }
     const renderer = this.deps.adapter.createRunRenderer(this.deps.replyTarget);
 
     // Merge per-run context/tools (this run only) on top of the bot-level deps.

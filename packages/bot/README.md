@@ -49,6 +49,12 @@ await bot.start();
 - `onInterrupt<TPayload>(eventName, handler)` — handle a captured agent
   interrupt (LangGraph-style `on_interrupt`); receives `{ payload, thread }`
   with `payload` typed `TPayload`.
+- `onCommand(command)` / `onCommand(name, handler)` — register a slash command.
+  The handler gets `{ thread, command, text, options, user }`. `text` is the
+  raw args (Slack); `options` is the typed, parsed form (`defineBotCommand`
+  with an `options` Standard Schema) for surfaces with native structured args
+  (e.g. Discord). Forwarded to adapters that support commands and ignored
+  elsewhere — also pass them up front via `commands` in `CreateBotOptions`.
 - `tool(t)` — register a `BotTool` (alternative to `opts.tools`); must be
   added before `start()`.
 - `start()` / `stop()` — bring adapters up / down.
@@ -159,17 +165,22 @@ reads after each `runAgent`), `decodeInteraction(raw)` (native event → opaque
 (`getOrCreate` → `AgentSession`), and the surface `capabilities` /
 `ackDeadlineMs`. Optional capability methods like `getMessages(target)` and
 `postFile(target, args)` back the matching `thread` methods when the surface
-supports them. See `@copilotkit/bot-slack` for a complete implementation.
+supports them. Slash commands are also capability-gated: an adapter forwards
+invocations via `sink.onCommand(IncomingCommand)`, and may implement
+`registerCommands(specs)` to publish the bot's declared commands up front
+(e.g. Discord's application-command API); adapters that omit it are skipped.
+See `@copilotkit/bot-slack` for a complete implementation.
 
 ## Exports
 
 `createBot`, `Bot`, `CreateBotOptions`, `BotHandler`; `Thread`; the
 `PlatformAdapter` boundary types (`RunRenderer`, `IngressSink`,
-`IncomingTurn`, `InteractionEvent`, `SurfaceCapabilities`, `ReplyTarget`,
-`ConversationStore`, `AgentSession`, `CapturedToolCall`, `CapturedInterrupt`,
-`UserQuery`); `ActionStore` / `InMemoryActionStore` / `ActionSnapshot` /
-`ActionRegistry` / `ActionExpiredError`; `BotTool` / `BotToolContext` /
-`defineBotTool` / `ContextEntry` /
+`IncomingTurn`, `InteractionEvent`, `IncomingCommand`, `SurfaceCapabilities`,
+`ReplyTarget`, `ConversationStore`, `AgentSession`, `CapturedToolCall`,
+`CapturedInterrupt`, `UserQuery`); `ActionStore` / `InMemoryActionStore` /
+`ActionSnapshot` / `ActionRegistry` / `ActionExpiredError`; `BotTool` /
+`BotToolContext` / `defineBotTool` / `BotCommand` / `CommandContext` /
+`CommandSpec` / `defineBotCommand` / `ContextEntry` /
 `AgentToolDescriptor` / `ObjectSchema` and the tool helpers
 (`toAgentToolDescriptors`, `parseToolArgs`, `stringifyHandlerResult`);
 `mintId` / `stableStringify`; `runAgentLoop`; plus the re-exported

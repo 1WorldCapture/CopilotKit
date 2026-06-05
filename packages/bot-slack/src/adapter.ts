@@ -104,6 +104,20 @@ export class SlackAdapter implements PlatformAdapter {
           platform: "slack",
         });
       },
+      onCommand: async (cmd) => {
+        await sink.onCommand({
+          command: cmd.command,
+          text: cmd.text,
+          // Slack delivers args as free text only; structured `rawOptions`
+          // are a Discord-style capability, so they're left unset here.
+          conversationKey: conversationKeyOf(cmd.conversation),
+          replyTarget: cmd.replyTarget,
+          user: cmd.senderUserId
+            ? await this.resolveUser(cmd.senderUserId)
+            : undefined,
+          platform: "slack",
+        });
+      },
     });
 
     // Every block_actions click → decode to an opaque-id InteractionEvent and

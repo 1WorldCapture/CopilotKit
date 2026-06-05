@@ -13,6 +13,22 @@ export type TurnHandler = (
   client: WebClient,
 ) => Promise<void> | void;
 
+/** A normalized slash-command invocation the listener hands off. */
+export interface SlackCommand {
+  /** Command name as Slack sent it, including the leading slash (e.g. "/triage"). */
+  command: string;
+  /** The argument string after the command. */
+  text: string;
+  conversation: { channelId: string; scope: string };
+  replyTarget: { channel: string };
+  senderUserId?: string;
+}
+
+export type CommandHandler = (
+  command: SlackCommand,
+  client: WebClient,
+) => Promise<void> | void;
+
 export interface ListenerConfig {
   app: App;
   /** Conversation store — used to check whether a thread-reply is "ours". */
@@ -21,6 +37,8 @@ export interface ListenerConfig {
   botUserId: string | undefined;
   /** Where each accepted turn is dispatched. */
   onTurn: TurnHandler;
+  /** Where each slash command is dispatched. */
+  onCommand: CommandHandler;
 }
 
 const MENTION_RE = /<@[UW][A-Z0-9]+>/g;
@@ -46,25 +64,28 @@ const stripMentions = (text: string): string =>
  *     (we recognise it by the presence of `<@botUserId>` in the text)
  */
 export function attachSlackListener(config: ListenerConfig): void {
-  const { app, store, onTurn } = config;
+  const { app, store, onTurn, onCommand } = config;
 
-  // ── Slash command: /agent <text> ────────────────────────────────────
-  // Treats the command as a top-level mention in the channel it was
-  // invoked from. The slash-command surface gives users a discoverable,
-  // mention-free entry point.
-  app.command("/agent", async ({ command, ack, client }) => {
+  // ── Slash commands ──────────────────────────────────────────────────
+  // Forward EVERY registered slash command to the engine, which routes it
+  // to the matching `bot.onCommand` handler (and ignores unregistered ones).
+  // We ack immediately (Slack's 3s deadline) and hand off; the handler does
+  // the slow work. Slack only delivers commands declared in the app config,
+  // so the `/.*/ ` matcher just catches whatever Slack sends.
+  // The command's args aren't posted to the channel, so we synthesise a
+  // stable per-(user) scope, letting a user re-run a command and continue
+  // the same conversation.
+  app.command(/.*/, async ({ command, ack, client }) => {
     await ack();
-    const userText = (command.text ?? "").trim();
-    if (!userText) return;
-    // Use the command's trigger_id-ish ts: command doesn't give us a ts,
-    // so we synthesise a stable scope per (channel, user) so the user can
-    // run /agent repeatedly and continue the same conversation.
-    const scope = `slash::${command.user_id}`;
-    await onTurn(
+    await onCommand(
       {
-        conversation: { channelId: command.channel_id, scope },
+        command: command.command,
+        text: (command.text ?? "").trim(),
+        conversation: {
+          channelId: command.channel_id,
+          scope: `slash::${command.user_id}`,
+        },
         replyTarget: { channel: command.channel_id },
-        userText,
         senderUserId: command.user_id,
       },
       client,

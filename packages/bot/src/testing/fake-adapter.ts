@@ -2,9 +2,10 @@ import type { AgentSubscriber } from "@ag-ui/client";
 import type { BotNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
 import type {
   PlatformAdapter, SurfaceCapabilities, IngressSink, IncomingTurn,
-  InteractionEvent, RunRenderer, CapturedToolCall, CapturedInterrupt,
+  InteractionEvent, IncomingCommand, RunRenderer, CapturedToolCall, CapturedInterrupt,
   ReplyTarget, NativePayload, UserQuery, ConversationStore,
 } from "../platform-adapter.js";
+import type { CommandSpec } from "../commands.js";
 
 /** A RunRenderer whose subscriber captures tool-call-end and custom (interrupt) events — used by run-loop tests. */
 export function makeFakeRunRenderer(): RunRenderer {
@@ -106,5 +107,20 @@ export class FakeAdapter implements PlatformAdapter {
     const evt: InteractionEvent = { id: "", conversationKey: "c", replyTarget: {}, ...partial };
     this.interactionsSeen.push(evt);
     void this.sink?.onInteraction(evt);
+  }
+  emitCommand(partial: Partial<IncomingCommand> & { command: string }): Promise<void> | void {
+    return this.sink?.onCommand({
+      text: "",
+      conversationKey: "c",
+      replyTarget: {},
+      platform: "fake",
+      ...partial,
+    });
+  }
+
+  /** Commands handed to the adapter via `registerCommands`; asserts the capability hook fires. */
+  registeredCommands?: readonly CommandSpec[];
+  registerCommands(commands: readonly CommandSpec[]): void {
+    this.registeredCommands = commands;
   }
 }

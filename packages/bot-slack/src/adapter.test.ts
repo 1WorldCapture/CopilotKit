@@ -403,6 +403,7 @@ describe("SlackAdapter action wiring", () => {
       onInteraction: (evt) => {
         received.push(evt);
       },
+      onCommand: vi.fn(),
     };
     await adapter.start(sink);
 

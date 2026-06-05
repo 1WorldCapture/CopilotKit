@@ -147,9 +147,33 @@ This package is the **library**. A runnable end-to-end demo wiring all of the
 above against a real workspace lives in
 [`examples/slack`](../../examples/slack).
 
+## Slash commands
+
+The adapter forwards every slash command Slack delivers to the engine, which
+routes it to the matching `bot.onCommand` handler (and ignores unregistered
+ones). Register handlers on the engine — see
+[`@copilotkit/bot`](../bot/README.md):
+
+```ts
+bot.onCommand({
+  name: "triage",
+  description: "Summarize the thread and propose issues.",
+  async handler({ thread, text, user }) {
+    await thread.runAgent({ prompt: `Triage: ${text}` });
+  },
+});
+```
+
+**You must also declare each command in the Slack app config** ("Slash
+Commands" / app manifest) with the same name — Slack won't deliver an
+unregistered command, even over Socket Mode. Args arrive as free text
+(`ctx.text`); the optional `options` schema is for surfaces with native
+structured args (e.g. Discord) and is unused on Slack. The adapter does not
+implement `registerCommands`, so the engine skips it (Slack matches commands
+dynamically rather than registering them up front).
+
 ## What's NOT in v1
 
-- Slash commands
 - Modals / true batched form submit
 - OAuth / multi-workspace install (single bot token only)
 - Durable (Redis/DB) `ActionStore` — in-memory only; actions expire on

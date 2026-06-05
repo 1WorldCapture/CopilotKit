@@ -158,6 +158,35 @@ export const confirmWriteTool: BotTool<typeof confirmWriteSchema> = {
 the card in place to an approved/declined state — so the picker reflects the
 decision the moment it's clicked.
 
+### Slash commands (`app/commands/`)
+
+Two app-owned slash commands, registered via `createBot({ commands })`:
+
+- **`/agent <text>`** — a mention-free entry point; runs the agent with the
+  command text as the prompt.
+- **`/triage [note]`** — summarizes the conversation and proposes Linear
+  issues to file.
+
+```ts
+defineBotCommand({
+  name: "agent",
+  description: "Ask the triage agent anything (no @mention needed).",
+  async handler({ thread, text, user }) {
+    if (!text) return void thread.post("Usage: `/agent <your question>`");
+    await thread.runAgent({ prompt: text, context: senderContext(user) });
+  },
+});
+```
+
+The args arrive as `ctx.text`; `runAgent({ prompt })` injects them as the
+user message (a slash command's text is never posted to the channel, so it
+isn't in the history the agent reconstructs).
+
+> **Slack setup:** each command must also be declared in your Slack app under
+> **Slash Commands** (add `/agent` and `/triage`) — Slack won't deliver an
+> unregistered command, even over Socket Mode. The command name there must
+> match the registered `name`.
+
 ### The agent (`runtime.ts`)
 
 A single CopilotKit `BuiltInAgent` (LLM + MCP) served over AG-UI by a

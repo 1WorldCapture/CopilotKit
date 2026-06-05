@@ -3,10 +3,22 @@ import type {
   IngressSink,
   IncomingTurn,
   InteractionEvent,
+  IncomingCommand,
 } from "./platform-adapter.js";
 import { ActionRegistry, ActionExpiredError } from "./action-registry.js";
 import { InMemoryActionStore, type ActionStore } from "./action-store.js";
-import { toAgentToolDescriptors, type BotTool, type ContextEntry } from "./tools.js";
+import {
+  toAgentToolDescriptors,
+  parseToolArgs,
+  type BotTool,
+  type ContextEntry,
+} from "./tools.js";
+import {
+  normalizeCommandName,
+  toCommandSpec,
+  type BotCommand,
+  type CommandContext,
+} from "./commands.js";
 import { Thread, type ThreadDeps } from "./thread.js";
 import type { AbstractAgent } from "@ag-ui/client";
 import type { InteractionContext, IncomingMessage } from "@copilotkit/bot-ui";
@@ -22,6 +34,8 @@ export interface CreateBotOptions {
   actionStore?: ActionStore;
   tools?: BotTool[];
   context?: ContextEntry[];
+  /** Slash commands. Forwarded to adapters that support them; ignored elsewhere. */
+  commands?: BotCommand[];
 }
 
 export interface Bot {
@@ -41,6 +55,10 @@ export interface Bot {
     eventName: string,
     h: (args: { payload: TPayload; thread: Thread }) => void | Promise<void>,
   ): void;
+  /** Register a slash command (with optional typed options). */
+  onCommand(command: BotCommand): void;
+  /** Register a free-text slash command by name. */
+  onCommand(name: string, handler: (ctx: CommandContext) => void | Promise<void>): void;
   tool(t: BotTool): void;
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -69,6 +87,8 @@ export function createBot(opts: CreateBotOptions): Bot {
     string,
     (args: { payload: unknown; thread: Thread }) => void | Promise<void>
   >();
+  const commandHandlers = new Map<string, BotCommand>();
+  for (const c of opts.commands ?? []) commandHandlers.set(normalizeCommandName(c.name), c);
   const waiters = new Map<string, (value: unknown) => void>();
 
   // Recomputed on start() so tools added via bot.tool() before start are picked up.
@@ -140,6 +160,28 @@ export function createBot(opts: CreateBotOptions): Bot {
           w(evt.value);
         }
       },
+      async onCommand(cmd: IncomingCommand) {
+        const command = commandHandlers.get(normalizeCommandName(cmd.command));
+        if (!command) return; // unregistered command → skip
+        const thread = makeThread(adapter, cmd.replyTarget, cmd.conversationKey);
+        // Resolve typed options from any structured args the surface supplied
+        // (e.g. Discord); text-only surfaces (Slack) leave `options` empty and
+        // the handler reads `text`.
+        let options: Record<string, unknown> = {};
+        if (command.options && cmd.rawOptions) {
+          const parsed = await parseToolArgs(command.options, cmd.rawOptions);
+          if (parsed.ok) options = parsed.value;
+        }
+        const ctx: CommandContext<Record<string, unknown>> = {
+          thread,
+          command: normalizeCommandName(cmd.command),
+          text: cmd.text,
+          options,
+          user: cmd.user,
+          platform: cmd.platform,
+        };
+        await command.handler(ctx);
+      },
     };
   }
 
@@ -165,12 +207,28 @@ export function createBot(opts: CreateBotOptions): Bot {
         h as (args: { payload: unknown; thread: Thread }) => void | Promise<void>,
       );
     },
+    onCommand(
+      commandOrName: BotCommand | string,
+      handler?: (ctx: CommandContext) => void | Promise<void>,
+    ) {
+      const command: BotCommand =
+        typeof commandOrName === "string"
+          ? { name: commandOrName, handler: handler as BotCommand["handler"] }
+          : commandOrName;
+      commandHandlers.set(normalizeCommandName(command.name), command);
+    },
     tool(t) {
       toolMap.set(t.name, t);
     },
     async start() {
       toolDescriptors = toAgentToolDescriptors([...toolMap.values()]);
       await Promise.all(opts.adapters.map((a) => a.start(makeSink(a))));
+      // Hand declared commands to adapters that register them up front (e.g.
+      // Discord); adapters without `registerCommands` are skipped.
+      const commandSpecs = [...commandHandlers.values()].map(toCommandSpec);
+      if (commandSpecs.length > 0) {
+        await Promise.all(opts.adapters.map((a) => a.registerCommands?.(commandSpecs)));
+      }
     },
     async stop() {
       await Promise.all(opts.adapters.map((a) => a.stop()));

@@ -15,6 +15,7 @@ export type {
   IngressSink,
   IncomingTurn,
   InteractionEvent,
+  IncomingCommand,
   SurfaceCapabilities,
   ReplyTarget,
   ConversationStore,
@@ -24,6 +25,10 @@ export type {
   UserQuery,
   NativePayload,
 } from "./platform-adapter.js";
+
+// Slash commands
+export { defineBotCommand, normalizeCommandName, toCommandSpec } from "./commands.js";
+export type { BotCommand, CommandContext, CommandSpec } from "./commands.js";
 
 // Action store
 export { InMemoryActionStore } from "./action-store.js";

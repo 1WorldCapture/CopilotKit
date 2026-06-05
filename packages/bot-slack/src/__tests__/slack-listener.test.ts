@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { attachSlackListener } from "../slack-listener.js";
+import type { SlackCommand } from "../slack-listener.js";
 import type { SlackConversationStore } from "../conversation-store.js";
 import type { IncomingTurn } from "../types.js";
 import { DM_SCOPE } from "../types.js";
@@ -78,9 +79,13 @@ function setup(opts?: {
   const onTurn = vi.fn(async (turn: IncomingTurn) => {
     turns.push(turn);
   });
+  const commands: SlackCommand[] = [];
+  const onCommand = vi.fn(async (cmd: SlackCommand) => {
+    commands.push(cmd);
+  });
   const fake = makeFakeApp();
-  attachSlackListener({ app: fake.app, store, botUserId: BOT_USER_ID, onTurn });
-  return { ...fake, turns, onTurn, store };
+  attachSlackListener({ app: fake.app, store, botUserId: BOT_USER_ID, onTurn, onCommand });
+  return { ...fake, turns, onTurn, commands, onCommand, store };
 }
 
 describe("slack-listener", () => {
@@ -354,30 +359,35 @@ describe("slack-listener", () => {
     expect(f.turns).toHaveLength(0);
   });
 
-  it("A10: /agent slash command becomes a turn in the invoking channel (flat reply)", async () => {
+  it("forwards a slash command to onCommand with normalized fields (flat reply target)", async () => {
     const f = setup();
     await f.fireCommand({
+      command: "/triage",
       channel_id: "C1",
       user_id: "UATAI001",
       text: "hello via slash",
     });
-    expect(f.turns).toHaveLength(1);
-    expect(f.turns[0]!.userText).toBe("hello via slash");
-    expect(f.turns[0]!.replyTarget).toEqual({ channel: "C1" });
-    expect(f.turns[0]!.conversation.scope).toBe("slash::UATAI001");
-  });
-
-  it("A10: /agent with empty text is a no-op (no turn)", async () => {
-    const f = setup();
-    await f.fireCommand({ channel_id: "C1", user_id: "UATAI001", text: "   " });
+    expect(f.commands).toHaveLength(1);
+    expect(f.commands[0]!.command).toBe("/triage");
+    expect(f.commands[0]!.text).toBe("hello via slash");
+    expect(f.commands[0]!.replyTarget).toEqual({ channel: "C1" });
+    expect(f.commands[0]!.conversation.scope).toBe("slash::UATAI001");
+    // A slash command is NOT a turn — routing/handling is the engine's job.
     expect(f.turns).toHaveLength(0);
   });
 
-  it("A10: repeat /agent from same user reuses the same conversation scope", async () => {
+  it("forwards a command even with empty text (the handler decides what to do)", async () => {
     const f = setup();
-    await f.fireCommand({ channel_id: "C1", user_id: "UATAI001", text: "one" });
-    await f.fireCommand({ channel_id: "C1", user_id: "UATAI001", text: "two" });
-    expect(f.turns[0]!.conversation.scope).toBe(f.turns[1]!.conversation.scope);
+    await f.fireCommand({ command: "/triage", channel_id: "C1", user_id: "UATAI001", text: "   " });
+    expect(f.commands).toHaveLength(1);
+    expect(f.commands[0]!.text).toBe("");
+  });
+
+  it("repeat command from same user reuses the same conversation scope", async () => {
+    const f = setup();
+    await f.fireCommand({ command: "/triage", channel_id: "C1", user_id: "UATAI001", text: "one" });
+    await f.fireCommand({ command: "/triage", channel_id: "C1", user_id: "UATAI001", text: "two" });
+    expect(f.commands[0]!.conversation.scope).toBe(f.commands[1]!.conversation.scope);
   });
 
   it("F-user-token: thread reply with both user and bot_id (xoxp- post) is treated as real user message", async () => {

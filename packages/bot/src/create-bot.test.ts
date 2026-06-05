@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import { createBot } from "./create-bot.js";
+import { defineBotCommand } from "./commands.js";
 import { FakeAdapter } from "./testing/fake-adapter.js";
 import { FakeAgent } from "./testing/fake-agent.js";
 import { Section, Actions, Button } from "@copilotkit/bot-ui";
@@ -217,5 +219,60 @@ describe("createBot", () => {
 
     expect(choicePromise).toBeDefined();
     await expect(choicePromise!).resolves.toEqual({ confirmed: true });
+  });
+});
+
+describe("createBot slash commands", () => {
+  it("routes a command to its handler with the raw text", async () => {
+    const fake = new FakeAdapter();
+    const bot = createBot({ adapters: [fake] });
+    let seen: { command: string; text: string } | undefined;
+    bot.onCommand("triage", ({ command, text }) => {
+      seen = { command, text };
+    });
+    await bot.start();
+    await fake.emitCommand({ command: "/Triage", text: "db is down" });
+    expect(seen).toEqual({ command: "triage", text: "db is down" });
+  });
+
+  it("ignores a command with no registered handler", async () => {
+    const fake = new FakeAdapter();
+    const bot = createBot({ adapters: [fake] });
+    let fired = false;
+    bot.onCommand("triage", () => {
+      fired = true;
+    });
+    await bot.start();
+    await fake.emitCommand({ command: "unknown", text: "x" });
+    expect(fired).toBe(false);
+  });
+
+  it("parses rawOptions through the command's schema into ctx.options", async () => {
+    let captured: { seat: string } | undefined;
+    const fake = new FakeAdapter();
+    const bot = createBot({
+      adapters: [fake],
+      commands: [
+        defineBotCommand({
+          name: "book",
+          options: z.object({ seat: z.string() }),
+          handler: ({ options }) => {
+            captured = options; // typed { seat: string }
+          },
+        }),
+      ],
+    });
+    await bot.start();
+    await fake.emitCommand({ command: "book", text: "raw", rawOptions: { seat: "12A" } });
+    expect(captured).toEqual({ seat: "12A" });
+  });
+
+  it("hands declared commands to adapters that implement registerCommands", async () => {
+    const fake = new FakeAdapter();
+    const bot = createBot({ adapters: [fake] });
+    bot.onCommand("triage", () => {});
+    bot.onCommand("status", () => {});
+    await bot.start();
+    expect(fake.registeredCommands?.map((c) => c.name).sort()).toEqual(["status", "triage"]);
   });
 });

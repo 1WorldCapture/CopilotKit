@@ -5,7 +5,7 @@ describe("FakeAdapter", () => {
   it("records posts and drives ingress", async () => {
     const a = new FakeAdapter();
     let got: string | undefined;
-    await a.start({ onTurn: (t) => { got = t.userText; }, onInteraction: () => {} });
+    await a.start({ onTurn: (t) => { got = t.userText; }, onInteraction: () => {}, onCommand: () => {} });
     a.emitTurn({ userText: "hi" });
     expect(got).toBe("hi");
     await a.post({}, [{ type: "text", props: { value: "x" } }]);
@@ -15,7 +15,7 @@ describe("FakeAdapter", () => {
   it("delivers interactions to the sink", async () => {
     const a = new FakeAdapter();
     let id: string | undefined;
-    await a.start({ onTurn: () => {}, onInteraction: (e) => { id = e.id; } });
+    await a.start({ onTurn: () => {}, onInteraction: (e) => { id = e.id; }, onCommand: () => {} });
     a.emitInteraction({ id: "ck:abc" });
     expect(id).toBe("ck:abc");
   });

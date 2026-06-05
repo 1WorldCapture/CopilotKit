@@ -1,5 +1,6 @@
 import type { AgentSubscriber, AbstractAgent } from "@ag-ui/client";
 import type { BotNode, MessageRef, PlatformUser, ThreadMessage } from "@copilotkit/bot-ui";
+import type { CommandSpec } from "./commands.js";
 
 /** Opaque to the bot core — created by an adapter during ingress and passed back to post/createRunRenderer. */
 export type ReplyTarget = unknown;
@@ -52,9 +53,25 @@ export interface InteractionEvent {
   messageRef?: MessageRef;
 }
 
+/** A slash-command invocation normalized by an adapter. */
+export interface IncomingCommand {
+  /** Command name as invoked (a leading slash and case are normalized by the engine). */
+  command: string;
+  /** Raw argument string after the command name (the form text-only surfaces deliver). */
+  text: string;
+  /** Structured, pre-parsed options when the surface delivers them (e.g. Discord). */
+  rawOptions?: Record<string, unknown>;
+  conversationKey: string;
+  replyTarget: ReplyTarget;
+  user?: PlatformUser;
+  platform: string;
+}
+
 export interface IngressSink {
   onTurn(turn: IncomingTurn): void | Promise<void>;
   onInteraction(evt: InteractionEvent): void | Promise<void>;
+  /** A slash command fired. Routed to the matching `bot.onCommand` handler (ignored if none). */
+  onCommand(cmd: IncomingCommand): void | Promise<void>;
 }
 
 export interface UserQuery {
@@ -102,4 +119,13 @@ export interface PlatformAdapter {
    * a capability-gated `{ ok: false, error }`.
    */
   postFile?(target: ReplyTarget, args: { bytes: Uint8Array; filename: string; title?: string; altText?: string }): Promise<{ ok: boolean; fileId?: string; error?: string }>;
+  /**
+   * Optional slash-command support. Called once on `start()` with the bot's
+   * declared commands, so a surface that registers commands up front (e.g.
+   * Discord's application-command API) can publish them. Surfaces that match
+   * commands dynamically (e.g. Slack, which forwards every `/command` to
+   * `sink.onCommand`) need not implement this; adapters that don't support
+   * commands at all simply omit it and command handlers never fire there.
+   */
+  registerCommands?(commands: readonly CommandSpec[]): void | Promise<void>;
 }

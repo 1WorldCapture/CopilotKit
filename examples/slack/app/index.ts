@@ -10,8 +10,7 @@
  * (below) is right there in the file you copy from to start a new bot.
  */
 import "dotenv/config";
-import { createBot, type ContextEntry } from "@copilotkit/bot";
-import type { PlatformUser } from "@copilotkit/bot-ui";
+import { createBot } from "@copilotkit/bot";
 import {
   slack,
   defaultSlackTools,
@@ -20,6 +19,8 @@ import {
 } from "@copilotkit/bot-slack";
 import { appTools } from "./tools/index.js";
 import { appContext } from "./context/app-context.js";
+import { appCommands } from "./commands/index.js";
+import { senderContext } from "./sender-context.js";
 import { closeBrowser } from "./render/browser.js";
 
 const required = (name: string): string => {
@@ -30,18 +31,6 @@ const required = (name: string): string => {
   }
   return v;
 };
-
-/**
- * Build the per-turn context naming the requesting Slack user, so the
- * agent can act "as" them (filter Linear by their email, @-mention them).
- * The Slack adapter resolves `{id, name?, email?}` per turn; if it's
- * absent there's nothing to attribute, so we add no entry.
- */
-function senderContext(user: PlatformUser | undefined): ContextEntry[] {
-  if (!user) return [];
-  const label = `${user.name ?? user.id}${user.email ? ` <${user.email}>` : ""} (Slack id ${user.id})`;
-  return [{ description: "Requesting Slack user", value: label }];
-}
 
 async function main() {
   const agentUrl = required("AGENT_URL");
@@ -74,6 +63,10 @@ async function main() {
     // guidance; `appContext` adds identity + triage policy.
     tools: [...defaultSlackTools, ...appTools],
     context: [...defaultSlackContext, ...appContext],
+    // Slash commands (`/agent`, `/triage`). Each must ALSO be declared in the
+    // Slack app config to actually fire — see README. The adapter forwards
+    // every received command; the engine routes by name.
+    commands: appCommands,
   });
 
   // Register ONLY onMention. The Slack listener already pre-filters ingress
