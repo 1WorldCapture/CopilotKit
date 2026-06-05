@@ -88,9 +88,10 @@ await bot.start();
 ### Tools (`app/tools/index.ts`)
 
 The bot's tools are plain `BotTool`s, collected into `appTools` and spread
-into `createBot({ tools })`. The Slack-context tools take a
-`SlackToolContext` (the `WebClient`, channel, and thread ts), supplied by
-the adapter at call time:
+into `createBot({ tools })`. Each handler receives the generic
+`BotToolContext` (`{ thread, message?, user?, signal?, platform }`) the
+adapter supplies at call time; tools reach platform power (post, postFile,
+`thread.getMessages()`, …) via the `thread` methods:
 
 - **`read_thread`** — fetches the messages in the current Slack thread so
   the agent can summarize/act on a real conversation (e.g. "write this
@@ -141,7 +142,7 @@ and blocks until the user clicks — then resolves to the clicked button's
 gets back `{ confirmed: true }`.
 
 ```tsx
-export const confirmWriteTool: BotTool<typeof confirmWriteSchema, SlackToolContext> = {
+export const confirmWriteTool: BotTool<typeof confirmWriteSchema> = {
   name: "confirm_write",
   description: "Ask the user to approve a write before you perform it … returns {confirmed}.",
   parameters: confirmWriteSchema,

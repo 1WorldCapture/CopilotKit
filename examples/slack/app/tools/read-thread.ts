@@ -5,71 +5,34 @@
  * gets the actual messages, and summarizes those instead of inventing
  * content.
  *
- * It's a worked example of a `BotTool` that reaches into Slack via the
- * `ctx` (the `WebClient` + channel + thread ts) — the same shape any
- * Slack-aware tool uses.
+ * It's a worked example of a `BotTool` that reads conversation history
+ * via the platform-agnostic `ctx.thread.getMessages()` capability —
+ * the adapter targets the current thread, so no channel/ts plumbing is
+ * needed.
  */
 import { z } from "zod";
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 
-const readThreadSchema = z.object({
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(200)
-    .optional()
-    .describe(
-      "Max messages to fetch. Returned in chronological order (oldest first). Defaults to 100.",
-    ),
-});
-
-interface SlackReply {
-  user?: string;
-  bot_id?: string;
-  text?: string;
-  ts?: string;
-}
-
-export const readThreadTool = defineBotTool<SlackToolContext>()({
+export const readThreadTool = defineBotTool({
   name: "read_thread",
   description:
     "Fetch the messages in the current Slack thread so you can summarize or " +
     "act on them. Call this before turning a conversation into a Linear issue " +
     "or a Notion postmortem — never guess what was said. Returns the messages " +
     "in chronological order with author and timestamp.",
-  parameters: readThreadSchema,
-  async handler({ limit }, ctx) {
-    // No thread ts means this is a brand-new top-level mention with no
-    // prior conversation to read.
-    if (!ctx.threadTs) {
-      return {
-        messages: [],
-        note: "This message is not in a thread yet, so there is no prior conversation to read.",
-      };
-    }
-
-    try {
-      const res = (await ctx.client.conversations.replies({
-        channel: ctx.channel,
-        ts: ctx.threadTs,
-        limit: limit ?? 100,
-      })) as { ok?: boolean; messages?: SlackReply[] };
-
-      const messages = (res.messages ?? []).map((m) => ({
-        author: m.user ? `<@${m.user}>` : (m.bot_id ?? "unknown"),
-        isBot: m.user === ctx.botUserId || Boolean(m.bot_id),
-        text: m.text ?? "",
+  parameters: z.object({}),
+  async handler(_args, { thread }) {
+    const messages = await thread.getMessages();
+    return {
+      count: messages.length,
+      messages: messages.map((m) => ({
+        user:
+          m.user?.name ??
+          m.user?.handle ??
+          (m.isBot ? "bot" : "unknown"),
+        text: m.text,
         ts: m.ts,
-      }));
-
-      return { channel: ctx.channel, messages };
-    } catch (err) {
-      return {
-        error: (err as Error).message,
-        hint: "The bot may be missing the `channels:history` / `groups:history` scope, or isn't a member of this channel.",
-      };
-    }
+      })),
+    };
   },
 });

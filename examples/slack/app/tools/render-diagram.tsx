@@ -9,7 +9,6 @@
 import { z } from "zod";
 import { Context } from "@copilotkit/bot-ui";
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderDiagram } from "../render/diagram.js";
 
 const schema = z.object({
@@ -34,7 +33,7 @@ function slug(s: string): string {
   );
 }
 
-export const renderDiagramTool = defineBotTool<SlackToolContext>()({
+export const renderDiagramTool = defineBotTool({
   name: "render_diagram",
   description:
     "Render a Mermaid diagram as an image and post it to the Slack thread. " +

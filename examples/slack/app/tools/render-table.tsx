@@ -13,7 +13,6 @@
 import { z } from "zod";
 import { Message, Header, Table, Row, Cell } from "@copilotkit/bot-ui";
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 const schema = z.object({
   title: z
@@ -89,7 +88,7 @@ export function toMonospaceTable(cols: Column[], dataRows: string[][]): string {
   return "```\n" + [fmt(header), ...body.map(fmt)].join("\n") + "\n```";
 }
 
-export const renderTableTool = defineBotTool<SlackToolContext>()({
+export const renderTableTool = defineBotTool({
   name: "render_table",
   description:
     "Render tabular data as a table posted to the Slack thread. Pass columns " +

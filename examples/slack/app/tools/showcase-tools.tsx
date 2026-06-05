@@ -23,7 +23,6 @@ import {
 } from "@copilotkit/bot-ui";
 import type { InteractionContext } from "@copilotkit/bot-ui";
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 // ── show_incident ──────────────────────────────────────────────────────────
 
@@ -82,7 +81,7 @@ export function IncidentCard({ id, title, severity, summary }: IncidentProps) {
   );
 }
 
-export const showIncidentTool = defineBotTool<SlackToolContext>()({
+export const showIncidentTool = defineBotTool({
   name: "show_incident",
   description:
     "Render an interactive incident card with Acknowledge/Escalate buttons. " +
@@ -126,7 +125,7 @@ export function StatusCard({ heading, fields }: StatusProps) {
   );
 }
 
-export const showStatusTool = defineBotTool<SlackToolContext>()({
+export const showStatusTool = defineBotTool({
   name: "show_status",
   description:
     "Render a status card: a heading plus a grid of label/value fields " +
@@ -170,7 +169,7 @@ export function LinksCard({ heading, links }: LinksProps) {
   );
 }
 
-export const showLinksTool = defineBotTool<SlackToolContext>()({
+export const showLinksTool = defineBotTool({
   name: "show_links",
   description:
     "Render a card of links: a heading plus a dot-separated row of clickable " +

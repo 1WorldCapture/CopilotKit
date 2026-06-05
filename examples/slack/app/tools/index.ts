@@ -19,17 +19,17 @@ import {
   showLinksTool,
 } from "./showcase-tools.js";
 import { confirmWriteTool } from "../human-in-the-loop/index.js";
-import type { AnyBotTool } from "@copilotkit/bot";
+import type { BotTool } from "@copilotkit/bot";
 
 /**
- * The Slack-context tools (read_thread, render_*) are typed
- * `BotTool<Schema, SlackToolContext>`: their handler ctx is narrowed to the
- * Slack tool context the adapter supplies at call time. `AnyBotTool` is the
- * adapter-agnostic tool shape `createBot({ tools })` accepts — its ctx is
- * supplied at runtime by the adapter (see `SlackAdapter.toolContext`), so the
- * Slack-narrowed tools assign directly with no cast.
+ * Every tool is a plain `BotTool`: its handler receives the generic
+ * `BotToolContext` (`{ thread, message?, user?, signal?, platform }`) the
+ * adapter supplies at call time. Platform power (post/stream/postFile,
+ * `thread.getMessages()`, `thread.lookupUser()`, …) is reached via the
+ * `thread` methods, so there's no per-adapter context and no cast needed —
+ * the array assigns straight into `createBot({ tools })`.
  */
-export const appTools: AnyBotTool[] = [
+export const appTools: BotTool[] = [
   readThreadTool,
   renderChartTool,
   renderDiagramTool,

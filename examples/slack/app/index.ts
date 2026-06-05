@@ -67,11 +67,11 @@ async function main() {
     },
     // `defaultSlackTools` ships `lookup_slack_user` (used for @-mentions);
     // `appTools` adds this bot's tools (read_thread, render_*, issue/page
-    // cards). Both carry Slack-narrowed handler ctx (`SlackToolContext`),
-    // which the adapter supplies per call; `createBot` accepts them as
-    // `AnyBotTool[]` (ctx provided at runtime — see `SlackAdapter.toolContext`),
-    // so no cast is needed. `defaultSlackContext` ships tagging/mrkdwn/
-    // thread-model guidance; `appContext` adds identity + triage policy.
+    // cards). Both are plain `BotTool`s whose handler receives the generic
+    // `BotToolContext`; the adapter supplies `thread`/`message`/`user` per
+    // call and tools reach platform power via `thread` methods, so no cast
+    // is needed. `defaultSlackContext` ships tagging/mrkdwn/thread-model
+    // guidance; `appContext` adds identity + triage policy.
     tools: [...defaultSlackTools, ...appTools],
     context: [...defaultSlackContext, ...appContext],
   });

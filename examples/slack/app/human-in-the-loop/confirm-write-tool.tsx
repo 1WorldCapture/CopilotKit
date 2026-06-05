@@ -11,7 +11,6 @@
  */
 import { z } from "zod";
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { ConfirmWrite } from "./confirm-write.js";
 
 export const confirmWriteSchema = z.object({
@@ -28,7 +27,7 @@ export const confirmWriteSchema = z.object({
     ),
 });
 
-export const confirmWriteTool = defineBotTool<SlackToolContext>()({
+export const confirmWriteTool = defineBotTool({
   name: "confirm_write",
   description:
     "Ask the user to approve a write before you perform it. Posts a " +

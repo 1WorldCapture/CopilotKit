@@ -9,7 +9,6 @@
 import { z } from "zod";
 import { Context } from "@copilotkit/bot-ui";
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderChart } from "../render/chart.js";
 
 const schema = z.object({
@@ -66,7 +65,7 @@ function slug(s: string): string {
   );
 }
 
-export const renderChartTool = defineBotTool<SlackToolContext>()({
+export const renderChartTool = defineBotTool({
   name: "render_chart",
   description:
     "Render a chart as an image and post it to the Slack thread. Pass a " +

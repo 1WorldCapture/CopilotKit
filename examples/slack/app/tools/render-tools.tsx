@@ -7,7 +7,6 @@
  * legacy `componentToFrontendTool(defineSlackComponent(...))` contract.
  */
 import { defineBotTool } from "@copilotkit/bot";
-import type { SlackToolContext } from "@copilotkit/bot-slack";
 import {
   IssueCard,
   IssueList,
@@ -17,7 +16,7 @@ import {
   pageListSchema,
 } from "../components/index.js";
 
-export const issueCardTool = defineBotTool<SlackToolContext>()({
+export const issueCardTool = defineBotTool({
   name: "issue_card",
   description:
     "Render ONE Linear issue as a rich Block Kit card with a status header, " +
@@ -31,7 +30,7 @@ export const issueCardTool = defineBotTool<SlackToolContext>()({
   },
 });
 
-export const issueListTool = defineBotTool<SlackToolContext>()({
+export const issueListTool = defineBotTool({
   name: "issue_list",
   description:
     "Render a list of Linear issues as a Block Kit card — a header plus one " +
@@ -46,7 +45,7 @@ export const issueListTool = defineBotTool<SlackToolContext>()({
   },
 });
 
-export const pageListTool = defineBotTool<SlackToolContext>()({
+export const pageListTool = defineBotTool({
   name: "page_list",
   description:
     "Render a list of Notion pages as a Block Kit card — a header plus one " +

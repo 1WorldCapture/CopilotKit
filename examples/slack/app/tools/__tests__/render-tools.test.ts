@@ -11,7 +11,7 @@ vi.mock("../../render/diagram.js", () => ({ renderDiagram }));
 const { renderChartTool } = await import("../render-chart.js");
 const { renderDiagramTool } = await import("../render-diagram.js");
 
-/** The ctx a SlackToolContext-bound BotTool handler receives. */
+/** The ctx a BotTool handler receives. */
 type HandlerCtx = Parameters<typeof renderChartTool.handler>[1];
 
 function makeCtx() {
@@ -24,14 +24,7 @@ function makeCtx() {
     }),
     postFile,
   };
-  const ctx = {
-    client: {} as never,
-    channel: "C1",
-    threadTs: "100.0",
-    botUserId: "BOT",
-    conversationKey: "C1::100.0",
-    thread,
-  } as unknown as HandlerCtx;
+  const ctx = { thread } as unknown as HandlerCtx;
   return { ctx, postFile, thread, posts };
 }
 
