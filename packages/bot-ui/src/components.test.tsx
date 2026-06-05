@@ -1,7 +1,53 @@
 import type { IRNode } from "./ir.js";
 import { describe, it, expect } from "vitest";
 import { renderToIR } from "./render.js";
-import { Message, Header, Section, Actions, Button, Divider, Table, Row, Cell } from "./components.js";
+import {
+  Message,
+  Header,
+  Section,
+  Actions,
+  Button,
+  Divider,
+  Table,
+  Row,
+  Cell,
+  Image,
+  Select,
+} from "./components.js";
+
+/**
+ * Compile-time prop type guards. This arrow is never invoked — the assertions
+ * are validated by `tsc` (build / check-types). Each `@ts-expect-error` fails
+ * the type-check if the props ever stop being enforced (regression guard); the
+ * trailing valid cases fail if a legitimate usage is wrongly rejected.
+ */
+const __typeGuards = () => {
+  // @ts-expect-error unknown prop on a container component
+  <Section bogus={1} />;
+  // @ts-expect-error invalid Button.style value
+  <Button style="nope">x</Button>;
+  // @ts-expect-error excess prop on Button
+  <Button extra>x</Button>;
+  // @ts-expect-error Message.accent must be a string
+  <Message accent={1} />;
+  // @ts-expect-error Divider takes no children
+  <Divider>x</Divider>;
+  // @ts-expect-error Image.url is required
+  <Image alt="x" />;
+  // @ts-expect-error Select.options is required
+  <Select placeholder="p" />;
+
+  // Valid usages — must type-check cleanly.
+  <Section>hello {42}</Section>;
+  <Message accent="#27AE60">
+    <Header>Title</Header>
+  </Message>;
+  <Button style="primary" value={{ ok: true }} onClick={() => {}}>
+    Go
+  </Button>;
+  <Image url="https://example.com/x.png" alt="x" />;
+};
+void __typeGuards;
 
 describe("component vocabulary", () => {
   it("Message wraps children with intrinsic type 'message'", () => {

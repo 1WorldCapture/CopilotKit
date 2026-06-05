@@ -73,6 +73,14 @@ short-circuit to a native payload.
 Each component is a thin function returning an `IRNode` with a stable
 intrinsic `type` string. An adapter maps these to native primitives.
 
+Every component has a fully-typed prop interface (`MessageProps`,
+`ButtonProps`, …, all exported), and the package ships its own `JSX` namespace
+(resolved via `jsxImportSource: "@copilotkit/bot-ui"`). So JSX is statically
+checked: unknown attributes, wrong prop values, and bad children are
+compile-time errors — `<Section bogus={1} />` or `<Button style="nope">` won't
+type-check. There are no lowercase intrinsic tags; the vocabulary is the
+capitalized component set below.
+
 | Component  | Purpose                                                            |
 | ---------- | ----------------------------------------------------------------- |
 | `Message`  | Root container for a single posted message.                       |
