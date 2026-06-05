@@ -55,24 +55,37 @@ describe("SlackAdapter.post", () => {
     expect((ref as { channel?: string }).channel).toBe("C1");
   });
 
-  it("wraps a <Message accent> in a colored attachment instead of top-level blocks", async () => {
+  it("renders a <Message accent> as a colored attachment ONLY — no top-level text/blocks (the attachment fallback is the notification text)", async () => {
     const { adapter, chat } = makeAdapter();
+    const header = (text: string): IRNode => ({
+      type: "header",
+      props: { children: [{ type: "text", props: { value: text } }] },
+    });
     await adapter.post({ channel: "C1" }, [
       {
         type: "message",
-        props: { accent: "#27AE60", children: [section("ok")] },
+        props: { accent: "#27AE60", children: [header("Open issues"), section("ok")] },
       },
     ]);
 
     const arg = chat.postMessage.mock.calls[0]![0] as {
+      text?: unknown;
       blocks?: unknown;
-      attachments?: Array<{ color: string; blocks: Array<{ type: string }> }>;
+      attachments?: Array<{ color: string; blocks: Array<{ type: string }>; fallback: string }>;
+      unfurl_links?: boolean;
+      unfurl_media?: boolean;
     };
+    // No top-level body text and no top-level blocks: Slack renders only the card.
+    expect(arg.text).toBeUndefined();
     expect(arg.blocks).toBeUndefined();
     expect(arg.attachments).toHaveLength(1);
     expect(arg.attachments![0]!.color).toBe("#27AE60");
-    expect(arg.attachments![0]!.blocks).toHaveLength(1);
-    expect(arg.attachments![0]!.blocks[0]!.type).toBe("section");
+    expect(arg.attachments![0]!.blocks[0]!.type).toBe("header");
+    // The attachment fallback is the short summary (the header text).
+    expect(arg.attachments![0]!.fallback).toBe("Open issues");
+    // Unfurling is suppressed on the post.
+    expect(arg.unfurl_links).toBe(false);
+    expect(arg.unfurl_media).toBe(false);
   });
 
   it("defaults fallback text to … when the IR has no text", async () => {
@@ -80,6 +93,33 @@ describe("SlackAdapter.post", () => {
     await adapter.post({ channel: "C1" }, [{ type: "divider", props: {} }]);
     const arg = chat.postMessage.mock.calls[0]![0] as { text: string };
     expect(arg.text).toBe("…");
+  });
+
+  it("uses the header as the short fallback summary — not a dump of the whole card", async () => {
+    const { adapter, chat } = makeAdapter();
+    const header = (text: string): IRNode => ({
+      type: "header",
+      props: { children: [{ type: "text", props: { value: text } }] },
+    });
+    await adapter.post({ channel: "C1" }, [
+      {
+        type: "message",
+        props: {
+          accent: "#27AE60",
+          children: [
+            header("Open CPK issues"),
+            section("CPK-1 Checkout 500s"),
+            section("CPK-2 Login broken"),
+          ],
+        },
+      },
+    ]);
+    const arg = chat.postMessage.mock.calls[0]![0] as {
+      attachments?: Array<{ fallback: string }>;
+    };
+    // The fallback is the header only — it must NOT concatenate the row text.
+    expect(arg.attachments![0]!.fallback).toBe("Open CPK issues");
+    expect(arg.attachments![0]!.fallback).not.toContain("CPK-1");
   });
 });
 
@@ -96,6 +136,29 @@ describe("SlackAdapter.update / delete use the stashed channel", () => {
     };
     expect(arg.channel).toBe("C1");
     expect(arg.ts).toBe("200.5");
+  });
+
+  it("update of an accent card sets attachments+fallback and no top-level text", async () => {
+    const { adapter, chat } = makeAdapter();
+    const header = (text: string): IRNode => ({
+      type: "header",
+      props: { children: [{ type: "text", props: { value: text } }] },
+    });
+    await adapter.update({ id: "200.5", channel: "C1" }, [
+      {
+        type: "message",
+        props: { accent: "#EB5757", children: [header("Updated")] },
+      },
+    ]);
+    const arg = chat.update.mock.calls[0]![0] as {
+      text?: unknown;
+      blocks?: unknown;
+      attachments?: Array<{ color: string; fallback: string }>;
+    };
+    expect(arg.text).toBeUndefined();
+    expect(arg.blocks).toBeUndefined();
+    expect(arg.attachments![0]!.color).toBe("#EB5757");
+    expect(arg.attachments![0]!.fallback).toBe("Updated");
   });
 
   it("delete removes the message at ref.id on its channel", async () => {

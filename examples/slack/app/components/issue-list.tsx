@@ -1,19 +1,29 @@
 /**
- * `issue_list` — renders a set of Linear issues as a compact, aligned Slack
- * table: a header, a single native Table block (status dot · identifier ·
- * title · assignee · updated), and a count footer.
+ * `issue_list` — renders a set of Linear issues as a clean Block Kit card:
+ * a header, then one scannable row per issue (status dot + linked identifier
+ * + title, with a greyed meta line for assignee / priority / updated), with
+ * dividers between rows and a count footer.
  *
- * Table cells are plain `raw_text` — no links, no mrkdwn/bold, no `:shortcode:`
- * emoji — so we use the UNICODE status glyph (`stateUnicode`) and plain strings.
- * The agent fetches issues from the Linear MCP server and passes the fields it
- * wants shown; the Slack formatting lives here. For a single issue (or right
- * after creating one) prefer `issue_card`, which shows a full grid.
+ * The agent fetches issues from the Linear MCP server and passes the fields
+ * it wants shown; the Slack formatting lives here. For a single issue (or
+ * right after creating one) prefer `issue_card`, which shows a full grid.
  *
  * Authored with the `@copilotkit/bot-ui` JSX vocabulary.
  */
 import { z } from "zod";
-import { Cell, Context, Header, Message, Row, Table } from "@copilotkit/bot-ui";
-import { accentForIssues, stateUnicode } from "./_status.js";
+import {
+  Context,
+  Divider,
+  Header,
+  Message,
+  Section,
+  type IRNode,
+} from "@copilotkit/bot-ui";
+import {
+  accentForIssues,
+  priorityShortcode,
+  stateShortcode,
+} from "./_status.js";
 
 const issueSchema = z.object({
   identifier: z.string().describe("Linear issue identifier, e.g. 'CPK-1234'."),
@@ -46,33 +56,39 @@ export const issueListSchema = z.object({
 });
 
 export type IssueListProps = z.infer<typeof issueListSchema>;
+type Issue = z.infer<typeof issueSchema>;
 
-/** Render a list of Linear issues as a compact Slack table. */
-export function IssueList({ heading, issues }: IssueListProps) {
-  const truncate = (s: string, n = 48) =>
-    s.length > n ? s.slice(0, n - 1) + "…" : s;
+/** Render a list of Linear issues as a Block Kit card. */
+export function IssueList({ heading, issues }: IssueListProps): IRNode {
+  const rows: IRNode[] = [];
+  issues.forEach((issue: Issue, i: number) => {
+    const idLink = issue.url
+      ? `[**${issue.identifier}**](${issue.url})`
+      : `**${issue.identifier}**`;
+
+    const prio = priorityShortcode(issue.priority);
+    const meta = [
+      issue.state,
+      issue.assignee
+        ? `:bust_in_silhouette: ${issue.assignee}`
+        : "unassigned",
+      issue.priority ? `${prio ? `${prio} ` : ""}${issue.priority}` : null,
+      issue.updated ? `:clock3: ${issue.updated}` : null,
+    ]
+      .filter(Boolean)
+      .join("   ·   ");
+
+    rows.push(
+      <Section>{`${stateShortcode(issue.state)}  ${idLink}  ${issue.title}`}</Section>,
+      <Context>{meta}</Context>,
+    );
+    if (i < issues.length - 1) rows.push(<Divider />);
+  });
+
   return (
     <Message accent={accentForIssues(issues)}>
-      <Header>{heading ?? "Linear issues"}</Header>
-      <Table
-        columns={[
-          { header: "", align: "center" },
-          { header: "Issue" },
-          { header: "Title" },
-          { header: "Assignee" },
-          { header: "Updated", align: "right" },
-        ]}
-      >
-        {issues.map((i) => (
-          <Row>
-            <Cell>{stateUnicode(i.state)}</Cell>
-            <Cell>{i.identifier}</Cell>
-            <Cell>{truncate(i.title)}</Cell>
-            <Cell>{i.assignee ?? "—"}</Cell>
-            <Cell>{i.updated ?? ""}</Cell>
-          </Row>
-        ))}
-      </Table>
+      <Header>{`📋  ${heading ?? "Linear issues"}`}</Header>
+      {rows}
       <Context>{`${issues.length} issue${issues.length === 1 ? "" : "s"}`}</Context>
     </Message>
   );

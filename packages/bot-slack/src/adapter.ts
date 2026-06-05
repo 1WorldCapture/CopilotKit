@@ -132,20 +132,28 @@ export class SlackAdapter implements PlatformAdapter {
   async post(target: BotReplyTarget, ir: IRNode[]): Promise<MessageRef> {
     const t = target as ReplyTarget;
     const { blocks, accent } = renderSlackMessage(ir);
+    const summary = fallbackText(ir);
+    // Suppress Slack link/media unfurling: a card with many links (e.g. an
+    // issue_list of Linear URLs) would otherwise spawn a wall of preview
+    // attachments. The gen-UI card IS the presentation.
+    const base = {
+      channel: t.channel,
+      thread_ts: t.threadTs,
+      unfurl_links: false,
+      unfurl_media: false,
+    };
+    // ACCENT path: render ONLY the colored attachment card. The attachment's
+    // `fallback` is the notification text; we deliberately omit the top-level
+    // `text` — Slack renders a top-level `text` as the message BODY above the
+    // attachment, producing a duplicate "text wall + card". NON-ACCENT path:
+    // top-level `text` is just the notification fallback and is NOT rendered as
+    // a body when `blocks` are present.
     const res = await this.client.chat.postMessage(
-      accent
-        ? ({
-            channel: t.channel,
-            thread_ts: t.threadTs,
-            text: fallbackText(ir),
-            attachments: [{ color: accent, blocks }],
-          } as unknown as Parameters<WebClient["chat"]["postMessage"]>[0])
-        : {
-            channel: t.channel,
-            thread_ts: t.threadTs,
-            text: fallbackText(ir),
-            blocks,
-          },
+      (accent
+        ? { ...base, attachments: [{ color: accent, blocks, fallback: summary }] }
+        : { ...base, text: summary, blocks }) as unknown as Parameters<
+        WebClient["chat"]["postMessage"]
+      >[0],
     );
     return { id: res.ts as string, channel: t.channel, ts: res.ts };
   }
@@ -153,18 +161,20 @@ export class SlackAdapter implements PlatformAdapter {
   async update(ref: MessageRef, ir: IRNode[]): Promise<void> {
     const channel = channelOf(ref);
     const { blocks, accent } = renderSlackMessage(ir);
+    const summary = fallbackText(ir);
+    // Mirror `post`'s accent/non-accent split. `chat.update` does not accept
+    // the `unfurl_*` flags, so they are only set on `postMessage`.
     await this.client.chat.update(
       accent
         ? ({
             channel,
             ts: ref.id,
-            text: fallbackText(ir),
-            attachments: [{ color: accent, blocks }],
+            attachments: [{ color: accent, blocks, fallback: summary }],
           } as unknown as Parameters<WebClient["chat"]["update"]>[0])
         : {
             channel,
             ts: ref.id,
-            text: fallbackText(ir),
+            text: summary,
             blocks,
           },
     );
@@ -183,6 +193,8 @@ export class SlackAdapter implements PlatformAdapter {
           channel: t.channel,
           thread_ts: t.threadTs,
           text,
+          unfurl_links: false,
+          unfurl_media: false,
         });
         if (!posted.ts) throw new Error("postMessage returned no ts");
         if (!firstTs) {
@@ -370,19 +382,16 @@ function channelOf(ref: MessageRef): string {
   return typeof channel === "string" ? channel : "";
 }
 
-/**
- * Slack requires a plain-text `text` fallback alongside `blocks` (used for
- * notifications and a11y). Collect descendant text nodes; default to "…".
- */
-function fallbackText(ir: IRNode[]): string {
+/** Collect a node's descendant text into a single whitespace-joined string. */
+function collectNodeText(node: IRNode): string {
   const acc: string[] = [];
-  const visit = (node: IRNode): void => {
-    if (typeof node.type === "string" && node.type === "text") {
-      const value = node.props?.value;
+  const visit = (n: IRNode): void => {
+    if (typeof n.type === "string" && n.type === "text") {
+      const value = n.props?.value;
       if (value != null) acc.push(String(value));
       return;
     }
-    const children = node.props?.children;
+    const children = n.props?.children;
     const list = Array.isArray(children)
       ? children
       : children && typeof children === "object" && "type" in children
@@ -390,7 +399,47 @@ function fallbackText(ir: IRNode[]): string {
         : [];
     for (const child of list as IRNode[]) visit(child);
   };
-  for (const node of ir) visit(node);
-  const text = acc.join(" ").replace(/\s+/g, " ").trim();
-  return text || "…";
+  visit(node);
+  return acc.join(" ");
+}
+
+/** Depth-first search for the first node of `type` in the IR tree. */
+function findFirst(ir: IRNode[], type: string): IRNode | undefined {
+  for (const node of ir) {
+    if (typeof node.type === "string" && node.type === type) return node;
+    const children = node.props?.children;
+    const list = Array.isArray(children)
+      ? children
+      : children && typeof children === "object" && "type" in children
+        ? [children]
+        : [];
+    const found = findFirst(list as IRNode[], type);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * Slack requires a plain-text `text` fallback alongside `blocks`/`attachments`
+ * (used for notifications and a11y) — NOT a rendering of the card body. Return
+ * a concise one-line summary: the card's header (title) if present, else the
+ * first text encountered. Collapse whitespace and truncate to ~150 chars. This
+ * MUST stay short: it is the notification text, never a dump of the whole tree
+ * (which Slack would render as a duplicate "text wall" above the card).
+ */
+function fallbackText(ir: IRNode[]): string {
+  const header = findFirst(ir, "header");
+  const source = header ? collectNodeText(header) : firstText(ir);
+  const text = source.replace(/\s+/g, " ").trim();
+  if (!text) return "…";
+  return text.length > 150 ? text.slice(0, 149) + "…" : text;
+}
+
+/** First descendant text node's value across the whole IR, or "". */
+function firstText(ir: IRNode[]): string {
+  for (const node of ir) {
+    const t = collectNodeText(node);
+    if (t.trim()) return t;
+  }
+  return "";
 }
