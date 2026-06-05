@@ -1,8 +1,13 @@
 /**
- * `issue_list` — renders a set of Linear issues as a clean Block Kit card:
- * a header, then one scannable row per issue (status dot + linked identifier
- * + title, with a greyed meta line for assignee / priority / updated), with
- * dividers between rows and a count footer.
+ * `issue_list` — renders a set of Linear issues as a compact Block Kit card:
+ * a header, ONE section with one scannable line per issue (status dot + linked
+ * identifier + title + assignee · updated), and a count footer.
+ *
+ * This is deliberately a fixed THREE-block layout (header + section + context)
+ * regardless of issue count: a card-per-issue layout (~3 blocks each) blows
+ * past Slack's per-attachment block limit on long lists and gets rejected with
+ * `invalid_attachments`. We instead inline up to `MAX` issues into a single
+ * section and surface the overflow in the footer.
  *
  * The agent fetches issues from the Linear MCP server and passes the fields
  * it wants shown; the Slack formatting lives here. For a single issue (or
@@ -13,17 +18,12 @@
 import { z } from "zod";
 import {
   Context,
-  Divider,
   Header,
   Message,
   Section,
   type IRNode,
 } from "@copilotkit/bot-ui";
-import {
-  accentForIssues,
-  priorityShortcode,
-  stateShortcode,
-} from "./_status.js";
+import { accentForIssues, stateShortcode } from "./_status.js";
 
 const issueSchema = z.object({
   identifier: z.string().describe("Linear issue identifier, e.g. 'CPK-1234'."),
@@ -58,38 +58,34 @@ export const issueListSchema = z.object({
 export type IssueListProps = z.infer<typeof issueListSchema>;
 type Issue = z.infer<typeof issueSchema>;
 
-/** Render a list of Linear issues as a Block Kit card. */
+/** Max issues rendered inline; the rest are summarized in the footer. */
+const MAX = 15;
+/** Max title length before trimming (keeps each line scannable). */
+const TITLE_MAX = 70;
+
+/** Render a list of Linear issues as a compact, fixed-size Block Kit card. */
 export function IssueList({ heading, issues }: IssueListProps): IRNode {
-  const rows: IRNode[] = [];
-  issues.forEach((issue: Issue, i: number) => {
+  const lines = issues.slice(0, MAX).map((issue: Issue) => {
     const idLink = issue.url
       ? `[**${issue.identifier}**](${issue.url})`
       : `**${issue.identifier}**`;
-
-    const prio = priorityShortcode(issue.priority);
-    const meta = [
-      issue.state,
-      issue.assignee
-        ? `:bust_in_silhouette: ${issue.assignee}`
-        : "unassigned",
-      issue.priority ? `${prio ? `${prio} ` : ""}${issue.priority}` : null,
-      issue.updated ? `:clock3: ${issue.updated}` : null,
-    ]
-      .filter(Boolean)
-      .join("   ·   ");
-
-    rows.push(
-      <Section>{`${stateShortcode(issue.state)}  ${idLink}  ${issue.title}`}</Section>,
-      <Context>{meta}</Context>,
-    );
-    if (i < issues.length - 1) rows.push(<Divider />);
+    const title =
+      issue.title.length > TITLE_MAX
+        ? `${issue.title.slice(0, TITLE_MAX)}…`
+        : issue.title;
+    return `${stateShortcode(issue.state)} ${idLink} ${title} — ${issue.assignee ?? "unassigned"} · ${issue.updated ?? ""}`;
   });
+
+  const footer =
+    issues.length > MAX
+      ? `Showing ${MAX} of ${issues.length} issues`
+      : `${issues.length} issue${issues.length === 1 ? "" : "s"}`;
 
   return (
     <Message accent={accentForIssues(issues)}>
       <Header>{`📋  ${heading ?? "Linear issues"}`}</Header>
-      {rows}
-      <Context>{`${issues.length} issue${issues.length === 1 ? "" : "s"}`}</Context>
+      <Section>{lines.join("\n")}</Section>
+      <Context>{footer}</Context>
     </Message>
   );
 }

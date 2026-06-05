@@ -19,11 +19,11 @@ import { IssueCard } from "../issue-card.js";
 import { PageList } from "../page-list.js";
 
 describe("IssueList component", () => {
-  it("renders a header, a status row and a meta line per issue", () => {
+  it("renders exactly three blocks: header, a single section with one line per issue, and a count footer", () => {
     const { blocks, accent } = renderSlackMessage(
       renderToIR(
         <IssueList
-          heading="Open CPK issues"
+          heading="Open"
           issues={[
             {
               identifier: "CPK-101",
@@ -34,44 +34,73 @@ describe("IssueList component", () => {
               priority: "Urgent",
               updated: "2d ago",
             },
+            {
+              identifier: "CPK-102",
+              title: "Login redirect loop",
+              url: "https://linear.app/copilotkit/issue/CPK-102",
+              state: "Todo",
+              assignee: "Sam",
+              priority: "High",
+              updated: "5h ago",
+            },
           ]}
         />,
       ),
     );
 
-    const json = JSON.stringify(blocks);
-    // Leads with a header block carrying the list emoji + heading.
+    // Fixed three-block layout regardless of issue count.
+    expect(blocks).toHaveLength(3);
     expect(blocks[0]).toMatchObject({
       type: "header",
-      text: { type: "plain_text", text: "📋  Open CPK issues" },
+      text: { type: "plain_text", text: "📋  Open" },
     });
-    // The identifier is a linked, bold label (Markdown bold → Slack bold).
-    expect(json).toContain(
+    expect(blocks[1]).toMatchObject({ type: "section" });
+    expect(blocks[2]).toMatchObject({ type: "context" });
+
+    const section = blocks[1] as { text: { type: string; text: string } };
+    expect(section.text.type).toBe("mrkdwn");
+    const text = section.text.text;
+    // One line per issue, joined by newlines.
+    expect(text.split("\n")).toHaveLength(2);
+    // Each issue is a linked, bold identifier (Markdown bold → Slack bold).
+    expect(text).toContain(
       "<https://linear.app/copilotkit/issue/CPK-101|*CPK-101*>",
     );
-    expect(json).toContain("Checkout 500s under load");
-    // In-progress maps to the blue dot; Urgent to the siren.
-    expect(json).toContain(":large_blue_circle:");
-    expect(json).toContain(":rotating_light:");
-    expect(json).toContain("Alem");
+    expect(text).toContain(
+      "<https://linear.app/copilotkit/issue/CPK-102|*CPK-102*>",
+    );
+    // Titles, assignees and updated meta are inline on the line.
+    expect(text).toContain("Checkout 500s under load");
+    expect(text).toContain("Login redirect loop");
+    expect(text).toContain("Alem");
+    expect(text).toContain("Sam");
+    expect(text).toContain("2d ago");
+    // In-progress maps to the blue dot.
+    expect(text).toContain(":large_blue_circle:");
     // Count footer.
-    expect(json).toContain("1 issue");
+    expect(JSON.stringify(blocks[2])).toContain("2 issues");
     // Hottest priority (Urgent) drives the accent.
     expect(accent).toBe("#EB5757");
   });
 
-  it("puts a divider between issues but not after the last", () => {
+  it("caps the section at 15 lines and reports the overflow in the footer", () => {
+    const issues = Array.from({ length: 20 }, (_, i) => ({
+      identifier: `CPK-${i + 1}`,
+      title: `Issue ${i + 1}`,
+    }));
     const { blocks } = renderSlackMessage(
-      renderToIR(
-        <IssueList
-          issues={[
-            { identifier: "CPK-1", title: "a" },
-            { identifier: "CPK-2", title: "b" },
-          ]}
-        />,
-      ),
+      renderToIR(<IssueList heading="Many" issues={issues} />),
     );
-    expect(blocks.filter((b) => b.type === "divider")).toHaveLength(1);
+
+    expect(blocks).toHaveLength(3);
+    const section = blocks[1] as { text: { text: string } };
+    // Only the first 15 issues are rendered.
+    expect(section.text.text.split("\n")).toHaveLength(15);
+    expect(section.text.text).toContain("*CPK-1*");
+    expect(section.text.text).toContain("*CPK-15*");
+    expect(section.text.text).not.toContain("*CPK-16*");
+    // Footer surfaces the overflow.
+    expect(JSON.stringify(blocks[2])).toContain("Showing 15 of 20 issues");
   });
 
   it("falls back to an emphasized identifier and 'unassigned' when fields are missing", () => {
