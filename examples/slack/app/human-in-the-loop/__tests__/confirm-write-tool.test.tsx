@@ -24,7 +24,7 @@ describe("confirm_write tool", () => {
       { thread, platform: "slack" } as never,
     );
 
-    expect(JSON.parse(result as string)).toEqual({ confirmed: true });
+    expect(result).toBe("The user APPROVED the write — proceed.");
 
     // The posted UI is a ConfirmWrite picker: amber accent + header carrying the action.
     expect(awaited).toHaveLength(1);
@@ -42,6 +42,6 @@ describe("confirm_write tool", () => {
       { thread, platform: "slack" } as never,
     );
 
-    expect(JSON.parse(result as string)).toEqual({ confirmed: false });
+    expect(result).toBe("The user DECLINED — do not write; acknowledge and stop.");
   });
 });

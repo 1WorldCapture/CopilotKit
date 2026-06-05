@@ -26,7 +26,7 @@ export const issueCardTool: BotTool<typeof issueCardSchema> = {
   parameters: issueCardSchema,
   async handler(props, { thread }) {
     await thread.post(<IssueCard {...props} />);
-    return JSON.stringify({ ok: true, rendered: "issue_card" });
+    return "Displayed the issue card to the user.";
   },
 };
 
@@ -41,7 +41,7 @@ export const issueListTool: BotTool<typeof issueListSchema> = {
   parameters: issueListSchema,
   async handler(props, { thread }) {
     await thread.post(<IssueList {...props} />);
-    return JSON.stringify({ ok: true, rendered: "issue_list" });
+    return "Displayed the issue list to the user.";
   },
 };
 
@@ -55,6 +55,6 @@ export const pageListTool: BotTool<typeof pageListSchema> = {
   parameters: pageListSchema,
   async handler(props, { thread }) {
     await thread.post(<PageList {...props} />);
-    return JSON.stringify({ ok: true, rendered: "page_list" });
+    return "Displayed the Notion pages to the user.";
   },
 };

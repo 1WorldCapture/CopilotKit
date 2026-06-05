@@ -93,7 +93,7 @@ export const showIncidentTool: BotTool<typeof incidentSchema, SlackToolContext> 
     parameters: incidentSchema,
     async handler(props, { thread }) {
       await thread.post(<IncidentCard {...props} />);
-      return JSON.stringify({ ok: true, rendered: "incident" });
+      return "Posted the incident card to the user.";
     },
   };
 
@@ -136,7 +136,7 @@ export const showStatusTool: BotTool<typeof statusSchema, SlackToolContext> = {
   parameters: statusSchema,
   async handler(props, { thread }) {
     await thread.post(<StatusCard {...props} />);
-    return JSON.stringify({ ok: true, rendered: "status" });
+    return "Posted the status card to the user.";
   },
 };
 
@@ -179,6 +179,6 @@ export const showLinksTool: BotTool<typeof linksSchema, SlackToolContext> = {
   parameters: linksSchema,
   async handler(props, { thread }) {
     await thread.post(<LinksCard {...props} />);
-    return JSON.stringify({ ok: true, rendered: "links" });
+    return "Posted the links to the user.";
   },
 };

@@ -43,7 +43,7 @@ export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
   parameters: schema,
   async handler({ title, mermaid }, ctx) {
     if (!ctx.postFile) {
-      return JSON.stringify({ ok: false, error: "file delivery unavailable" });
+      return "Diagram render failed: file delivery unavailable. Fix the Mermaid syntax and retry.";
     }
     try {
       const png = await renderDiagram(mermaid);
@@ -53,23 +53,17 @@ export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
         title: title ?? "Diagram",
         altText: title ?? "Generated diagram",
       });
-      // After the image lands, post a small JSX caption card.
-      let caption = false;
-      if (res.ok) {
-        await ctx.thread.post(
-          <Context>{`:triangular_ruler:  *${title ?? "Diagram"}* — rendered as an image above.`}</Context>,
-        );
-        caption = true;
+      if (!res.ok) {
+        return `Diagram render failed: ${res.error ?? "upload was rejected"}. Fix the Mermaid syntax and retry.`;
       }
-      return JSON.stringify({
-        ok: res.ok,
-        posted: res.ok,
-        ...(caption ? { caption: true } : {}),
-        ...(res.error ? { error: res.error } : {}),
-      });
+      // After the image lands, post a small JSX caption card.
+      await ctx.thread.post(
+        <Context>{`:triangular_ruler:  *${title ?? "Diagram"}* — rendered as an image above.`}</Context>,
+      );
+      return "Rendered and posted the diagram image to the thread.";
     } catch (e) {
       // Surface the Mermaid parse error so the agent can repair the source.
-      return JSON.stringify({ ok: false, error: (e as Error).message });
+      return `Diagram render failed: ${(e as Error).message}. Fix the Mermaid syntax and retry.`;
     }
   },
 };

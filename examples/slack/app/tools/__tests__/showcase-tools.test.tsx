@@ -67,10 +67,7 @@ describe("show_incident render-tool", () => {
     );
 
     expect(posts).toHaveLength(1);
-    expect(JSON.parse(result as string)).toEqual({
-      ok: true,
-      rendered: "incident",
-    });
+    expect(result).toBe("Posted the incident card to the user.");
 
     const ir = renderToIR(posts[0] as never);
     const { blocks, accent } = renderSlackMessage(ir);
@@ -136,10 +133,7 @@ describe("show_status render-tool", () => {
       { thread } as unknown as StatusCtx,
     );
 
-    expect(JSON.parse(result as string)).toEqual({
-      ok: true,
-      rendered: "status",
-    });
+    expect(result).toBe("Posted the status card to the user.");
     const { blocks, accent } = renderSlackMessage(
       renderToIR(posts[0] as never),
     );
@@ -166,10 +160,7 @@ describe("show_links render-tool", () => {
       { thread } as unknown as LinksCtx,
     );
 
-    expect(JSON.parse(result as string)).toEqual({
-      ok: true,
-      rendered: "links",
-    });
+    expect(result).toBe("Posted the links to the user.");
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     const text = JSON.stringify(blocks);
     expect(text).toContain("<https://example.com/auth|Auth outage>");

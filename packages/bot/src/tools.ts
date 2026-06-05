@@ -20,6 +20,23 @@ export type BotTool<Schema extends ObjectSchema = ObjectSchema, Extra = Record<s
   name: string;
   description: string;
   parameters: Schema;
+  /**
+   * Run the tool. The returned value is what the **agent (LLM)** reads back as
+   * the tool result — not the end user.
+   *
+   * Return any value: a `string` is sent to the agent as-is; `null`/`undefined`
+   * becomes an empty string; any other value is JSON-stringified automatically
+   * (see {@link stringifyHandlerResult}). Do NOT hand-stringify and do NOT
+   * return boilerplate like `{ ok: true }`.
+   *
+   * Return something MEANINGFUL to the model:
+   * - a render tool (one that posts a card via `thread.post`) → a short
+   *   natural-language confirmation (e.g. `"Displayed the issue card to the
+   *   user."`) so the model gives a brief ack and doesn't restate the card;
+   * - a failure → the actual error text so the model can repair and retry;
+   * - a data tool → the data itself (return the raw object/array — the SDK
+   *   serializes it for you).
+   */
   handler(args: InferSchemaOutput<Schema>, ctx: BotToolContext<Extra> & Extra): Promise<unknown> | unknown;
 };
 

@@ -43,18 +43,16 @@ beforeEach(() => {
 describe("render_chart tool", () => {
   it("renders a config object and posts the PNG", async () => {
     const { ctx, postFile, posts } = makeCtx();
-    const out = JSON.parse(
-      (await renderChartTool.handler(
-        {
-          title: "Revenue Q2",
-          chartSpec: {
-            type: "bar",
-            data: { labels: ["a"], datasets: [{ data: [1] }] },
-          },
+    const out = (await renderChartTool.handler(
+      {
+        title: "Revenue Q2",
+        chartSpec: {
+          type: "bar",
+          data: { labels: ["a"], datasets: [{ data: [1] }] },
         },
-        ctx,
-      )) as string,
-    );
+      },
+      ctx,
+    )) as string;
     expect(renderChart).toHaveBeenCalledWith(
       expect.objectContaining({ type: "bar" }),
     );
@@ -64,7 +62,7 @@ describe("render_chart tool", () => {
         title: "Revenue Q2",
       }),
     );
-    expect(out).toMatchObject({ ok: true, posted: true, caption: true });
+    expect(out).toBe("Rendered and posted the chart image to the thread.");
     // The caption card was posted after the upload.
     expect(posts).toHaveLength(1);
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
@@ -77,19 +75,17 @@ describe("render_chart tool", () => {
     renderChart.mockRejectedValueOnce(
       new Error("Chart.js render failed: bad type"),
     );
-    const out = JSON.parse(
-      (await renderChartTool.handler(
-        {
-          chartSpec: {
-            type: "nope",
-            data: { labels: [], datasets: [{ data: [] }] },
-          },
+    const out = (await renderChartTool.handler(
+      {
+        chartSpec: {
+          type: "nope",
+          data: { labels: [], datasets: [{ data: [] }] },
         },
-        ctx,
-      )) as string,
-    );
-    expect(out.ok).toBe(false);
-    expect(out.error).toContain("Chart.js render failed");
+      },
+      ctx,
+    )) as string;
+    expect(out).toContain("Chart render failed");
+    expect(out).toContain("Chart.js render failed");
     expect(postFile).not.toHaveBeenCalled();
   });
 });
@@ -97,17 +93,15 @@ describe("render_chart tool", () => {
 describe("render_diagram tool", () => {
   it("renders Mermaid and posts the PNG", async () => {
     const { ctx, postFile, posts } = makeCtx();
-    const out = JSON.parse(
-      (await renderDiagramTool.handler(
-        { title: "Flow", mermaid: "flowchart TD\n A-->B" },
-        ctx,
-      )) as string,
-    );
+    const out = (await renderDiagramTool.handler(
+      { title: "Flow", mermaid: "flowchart TD\n A-->B" },
+      ctx,
+    )) as string;
     expect(renderDiagram).toHaveBeenCalledWith("flowchart TD\n A-->B");
     expect(postFile).toHaveBeenCalledWith(
       expect.objectContaining({ filename: "flow.png" }),
     );
-    expect(out).toMatchObject({ ok: true, posted: true, caption: true });
+    expect(out).toBe("Rendered and posted the diagram image to the thread.");
     expect(posts).toHaveLength(1);
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     expect(JSON.stringify(blocks)).toContain(":triangular_ruler:");
@@ -117,11 +111,12 @@ describe("render_diagram tool", () => {
   it("surfaces a render error for the agent to repair", async () => {
     const { ctx, postFile } = makeCtx();
     renderDiagram.mockRejectedValueOnce(new Error("Parse error on line 2"));
-    const out = JSON.parse(
-      (await renderDiagramTool.handler({ mermaid: "bogus" }, ctx)) as string,
-    );
-    expect(out.ok).toBe(false);
-    expect(out.error).toContain("Parse error");
+    const out = (await renderDiagramTool.handler(
+      { mermaid: "bogus" },
+      ctx,
+    )) as string;
+    expect(out).toContain("Diagram render failed");
+    expect(out).toContain("Parse error");
     expect(postFile).not.toHaveBeenCalled();
   });
 });

@@ -55,15 +55,12 @@ describe("toMonospaceTable", () => {
 describe("render_table tool", () => {
   it("posts a <Table> rendering to a header + native table block", async () => {
     const { posts, ctx } = fakeThread();
-    const out = JSON.parse(
-      (await renderTableTool.handler(
-        { title: "Open issues", columns: COLS, rows: ROWS },
-        ctx,
-      )) as string,
-    );
+    const out = (await renderTableTool.handler(
+      { title: "Open issues", columns: COLS, rows: ROWS },
+      ctx,
+    )) as string;
     expect(posts).toHaveLength(1);
-    expect(out).toMatchObject({ ok: true, rendered: "table" });
-    expect(out.fellBackToMonospace).toBeUndefined();
+    expect(out).toBe("Rendered the table for the user.");
 
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     expect(blocks[0]).toMatchObject({
@@ -93,19 +90,13 @@ describe("render_table tool", () => {
 
   it("falls back to a monospace table when the native post is rejected", async () => {
     const { posts, ctx } = fakeThread(1);
-    const out = JSON.parse(
-      (await renderTableTool.handler(
-        { title: "Open issues", columns: COLS, rows: ROWS },
-        ctx,
-      )) as string,
-    );
+    const out = (await renderTableTool.handler(
+      { title: "Open issues", columns: COLS, rows: ROWS },
+      ctx,
+    )) as string;
     // First post threw; second (fallback) recorded.
     expect(posts).toHaveLength(1);
-    expect(out).toMatchObject({
-      ok: true,
-      rendered: "table",
-      fellBackToMonospace: true,
-    });
+    expect(out).toBe("Rendered the table (monospace fallback) for the user.");
 
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     const text = JSON.stringify(blocks);
@@ -117,37 +108,33 @@ describe("render_table tool", () => {
   it("clamps to 99 data rows and reports the drop", async () => {
     const { posts, ctx } = fakeThread();
     const manyRows = Array.from({ length: 150 }, (_, i) => [`r${i}`, "x"]);
-    const out = JSON.parse(
-      (await renderTableTool.handler(
-        { columns: COLS, rows: manyRows },
-        ctx,
-      )) as string,
-    );
+    const out = (await renderTableTool.handler(
+      { columns: COLS, rows: manyRows },
+      ctx,
+    )) as string;
+    expect(out).toBe("Rendered the table for the user.");
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     const table = blocks.find((b) => b.type === "table") as
       | TableBlock
       | undefined;
     // 99 data rows + 1 header row.
     expect(table?.rows).toHaveLength(100);
-    expect(out.notes).toEqual(["only the first 99 of 150 rows shown"]);
   });
 
   it("clamps to 20 columns and reports the drop", async () => {
     const { posts, ctx } = fakeThread();
     const manyCols = Array.from({ length: 25 }, (_, i) => ({ header: `c${i}` }));
     const wideRow = manyCols.map((_, i) => `v${i}`);
-    const out = JSON.parse(
-      (await renderTableTool.handler(
-        { columns: manyCols, rows: [wideRow] },
-        ctx,
-      )) as string,
-    );
+    const out = (await renderTableTool.handler(
+      { columns: manyCols, rows: [wideRow] },
+      ctx,
+    )) as string;
+    expect(out).toBe("Rendered the table for the user.");
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     const table = blocks.find((b) => b.type === "table") as
       | TableBlock
       | undefined;
     expect(table?.rows?.[0]).toHaveLength(20);
-    expect(out.notes).toEqual(["only the first 20 of 25 columns shown"]);
   });
 });
 

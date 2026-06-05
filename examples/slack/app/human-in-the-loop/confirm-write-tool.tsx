@@ -38,6 +38,8 @@ export const confirmWriteTool: BotTool<typeof confirmWriteSchema, SlackToolConte
   parameters: confirmWriteSchema,
   async handler({ action, detail }, { thread }) {
     const choice = await thread.awaitChoice(<ConfirmWrite action={action} detail={detail} />);
-    return JSON.stringify(choice ?? { confirmed: false });
+    return (choice as { confirmed?: boolean })?.confirmed
+      ? "The user APPROVED the write — proceed."
+      : "The user DECLINED — do not write; acknowledge and stop.";
   },
 };

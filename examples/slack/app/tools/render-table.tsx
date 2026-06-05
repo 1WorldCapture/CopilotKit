@@ -99,14 +99,7 @@ export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
     "right shape. Max 20 columns and 100 rows.",
   parameters: schema,
   async handler({ title, columns, rows }, { thread }) {
-    const { cols, dataRows, notes } = clamp(columns, rows);
-    const ack = (extra: Record<string, unknown>) =>
-      JSON.stringify({
-        ok: true,
-        rendered: "table",
-        ...(notes.length ? { notes } : {}),
-        ...extra,
-      });
+    const { cols, dataRows } = clamp(columns, rows);
 
     const table = (
       <Message>
@@ -125,7 +118,7 @@ export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
 
     try {
       await thread.post(table);
-      return ack({});
+      return "Rendered the table for the user.";
     } catch {
       // Native Table block not accepted (older workspace / unsupported) — post
       // the same data as a monospace code-fenced table via the raw escape hatch
@@ -142,7 +135,7 @@ export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
           },
         ],
       });
-      return ack({ fellBackToMonospace: true });
+      return "Rendered the table (monospace fallback) for the user.";
     }
   },
 };

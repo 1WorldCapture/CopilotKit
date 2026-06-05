@@ -82,16 +82,13 @@ export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
       try {
         spec = JSON.parse(chartSpec) as Record<string, unknown>;
       } catch (e) {
-        return JSON.stringify({
-          ok: false,
-          error: `chartSpec must be a Chart.js config object; got an unparseable string: ${(e as Error).message}`,
-        });
+        return `Chart render failed: chartSpec must be a Chart.js config object; got an unparseable string: ${(e as Error).message}`;
       }
     } else {
       spec = chartSpec as Record<string, unknown>;
     }
     if (!ctx.postFile) {
-      return JSON.stringify({ ok: false, error: "file delivery unavailable" });
+      return "Chart render failed: file delivery unavailable";
     }
     try {
       const png = await renderChart(spec);
@@ -101,22 +98,16 @@ export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
         title: title ?? "Chart",
         altText: title ?? "Generated chart",
       });
-      // After the image lands, post a small JSX caption card.
-      let caption = false;
-      if (res.ok) {
-        await ctx.thread.post(
-          <Context>{`:bar_chart:  *${title ?? "Chart"}* — rendered as an image above.`}</Context>,
-        );
-        caption = true;
+      if (!res.ok) {
+        return `Chart render failed: ${res.error ?? "upload was rejected"}`;
       }
-      return JSON.stringify({
-        ok: res.ok,
-        posted: res.ok,
-        ...(caption ? { caption: true } : {}),
-        ...(res.error ? { error: res.error } : {}),
-      });
+      // After the image lands, post a small JSX caption card.
+      await ctx.thread.post(
+        <Context>{`:bar_chart:  *${title ?? "Chart"}* — rendered as an image above.`}</Context>,
+      );
+      return "Rendered and posted the chart image to the thread.";
     } catch (e) {
-      return JSON.stringify({ ok: false, error: (e as Error).message });
+      return `Chart render failed: ${(e as Error).message}`;
     }
   },
 };

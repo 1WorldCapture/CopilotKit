@@ -44,11 +44,10 @@ export const readThreadTool: BotTool<typeof readThreadSchema, SlackToolContext> 
     // No thread ts means this is a brand-new top-level mention with no
     // prior conversation to read.
     if (!ctx.threadTs) {
-      return JSON.stringify({
-        ok: true,
+      return {
         messages: [],
         note: "This message is not in a thread yet, so there is no prior conversation to read.",
-      });
+      };
     }
 
     try {
@@ -65,13 +64,12 @@ export const readThreadTool: BotTool<typeof readThreadSchema, SlackToolContext> 
         ts: m.ts,
       }));
 
-      return JSON.stringify({ ok: true, channel: ctx.channel, messages });
+      return { channel: ctx.channel, messages };
     } catch (err) {
-      return JSON.stringify({
-        ok: false,
+      return {
         error: (err as Error).message,
         hint: "The bot may be missing the `channels:history` / `groups:history` scope, or isn't a member of this channel.",
-      });
+      };
     }
   },
 };

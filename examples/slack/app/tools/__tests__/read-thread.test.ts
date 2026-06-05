@@ -43,9 +43,12 @@ describe("read_thread tool", () => {
       ],
     }));
 
-    const out = JSON.parse((await readThreadTool.handler({}, ctx)) as string);
+    const out = (await readThreadTool.handler({}, ctx)) as {
+      channel?: string;
+      messages: Array<{ author: string; isBot: boolean; text: string }>;
+    };
 
-    expect(out.ok).toBe(true);
+    expect(out.channel).toBe("C123");
     expect(out.messages).toHaveLength(3);
     expect(out.messages[0]).toMatchObject({
       author: "<@UALICE>",
@@ -53,7 +56,7 @@ describe("read_thread tool", () => {
       text: "checkout is 500ing",
     });
     // The bot's own message is flagged.
-    expect(out.messages[1].isBot).toBe(true);
+    expect(out.messages[1]?.isBot).toBe(true);
     // A bot_id-only message is attributed and flagged as a bot.
     expect(out.messages[2]).toMatchObject({ author: "BPAGER", isBot: true });
   });
@@ -62,9 +65,11 @@ describe("read_thread tool", () => {
     const replies = vi.fn(() => ({ ok: true, messages: [] }));
     const ctx = makeCtx(replies, { threadTs: undefined });
 
-    const out = JSON.parse((await readThreadTool.handler({}, ctx)) as string);
+    const out = (await readThreadTool.handler({}, ctx)) as {
+      messages: unknown[];
+      note?: string;
+    };
 
-    expect(out.ok).toBe(true);
     expect(out.messages).toEqual([]);
     expect(out.note).toMatch(/not in a thread/i);
     // No Slack call when there's nothing to read.
@@ -76,9 +81,11 @@ describe("read_thread tool", () => {
       throw new Error("missing_scope");
     });
 
-    const out = JSON.parse((await readThreadTool.handler({}, ctx)) as string);
+    const out = (await readThreadTool.handler({}, ctx)) as {
+      error?: string;
+      hint?: string;
+    };
 
-    expect(out.ok).toBe(false);
     expect(out.error).toBe("missing_scope");
     expect(out.hint).toMatch(/scope/i);
   });

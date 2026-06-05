@@ -38,10 +38,7 @@ describe("issue_card render-tool", () => {
     );
 
     expect(posts).toHaveLength(1);
-    expect(JSON.parse(result as string)).toEqual({
-      ok: true,
-      rendered: "issue_card",
-    });
+    expect(result).toBe("Displayed the issue card to the user.");
 
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     expect(blocks[0]).toMatchObject({
@@ -73,10 +70,7 @@ describe("issue_list render-tool", () => {
     );
 
     expect(posts).toHaveLength(1);
-    expect(JSON.parse(result as string)).toEqual({
-      ok: true,
-      rendered: "issue_list",
-    });
+    expect(result).toBe("Displayed the issue list to the user.");
 
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     expect(blocks[0]).toMatchObject({
@@ -108,10 +102,7 @@ describe("page_list render-tool", () => {
     );
 
     expect(posts).toHaveLength(1);
-    expect(JSON.parse(result as string)).toEqual({
-      ok: true,
-      rendered: "page_list",
-    });
+    expect(result).toBe("Displayed the Notion pages to the user.");
 
     const { blocks } = renderSlackMessage(renderToIR(posts[0] as never));
     expect(blocks[0]).toMatchObject({
