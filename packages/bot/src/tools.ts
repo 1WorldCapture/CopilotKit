@@ -40,6 +40,30 @@ export type BotTool<Schema extends ObjectSchema = ObjectSchema, Extra = Record<s
   handler(args: InferSchemaOutput<Schema>, ctx: BotToolContext<Extra> & Extra): Promise<unknown> | unknown;
 };
 
+/**
+ * Define a {@link BotTool} with full type inference. The handler's `args` are
+ * inferred from `parameters`, and the handler `ctx` is typed by the `Ctx` you
+ * supply (the per-platform tool context an adapter provides at runtime).
+ *
+ * Curried because TypeScript cannot partially infer type arguments: specify the
+ * context type, then pass the tool (whose schema is inferred from `parameters`):
+ *
+ * ```ts
+ * const tool = defineBotTool<SlackToolContext>()({
+ *   name: "show_thing",
+ *   description: "...",
+ *   parameters: z.object({ id: z.string() }),
+ *   async handler({ id }, { thread, client }) {  // `id` and `ctx` fully typed
+ *     await thread.post(<Thing id={id} />);
+ *     return "Displayed the thing.";
+ *   },
+ * });
+ * ```
+ */
+export function defineBotTool<Ctx = Record<string, unknown>>() {
+  return <Schema extends ObjectSchema>(tool: BotTool<Schema, Ctx>): BotTool<Schema, Ctx> => tool;
+}
+
 // Adapter-supplied tool context is provided at runtime (e.g. SlackToolContext); typed loosely here. Full adapter<->tool type coupling is a future enhancement.
 export type AnyBotTool = BotTool<ObjectSchema, any>;
 export interface ContextEntry {

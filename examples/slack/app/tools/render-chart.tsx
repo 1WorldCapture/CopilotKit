@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { Context } from "@copilotkit/bot-ui";
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderChart } from "../render/chart.js";
 
@@ -66,7 +66,7 @@ function slug(s: string): string {
   );
 }
 
-export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
+export const renderChartTool = defineBotTool<SlackToolContext>()({
   name: "render_chart",
   description:
     "Render a chart as an image and post it to the Slack thread. Pass a " +
@@ -107,4 +107,4 @@ export const renderChartTool: BotTool<typeof schema, SlackToolContext> = {
       return `Chart render failed: ${(e as Error).message}`;
     }
   },
-};
+});

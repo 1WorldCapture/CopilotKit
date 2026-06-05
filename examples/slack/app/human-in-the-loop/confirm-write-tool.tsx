@@ -10,7 +10,7 @@
  * performs the write once this returns `{ confirmed: true }`.
  */
 import { z } from "zod";
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { ConfirmWrite } from "./confirm-write.js";
 
@@ -28,7 +28,7 @@ export const confirmWriteSchema = z.object({
     ),
 });
 
-export const confirmWriteTool: BotTool<typeof confirmWriteSchema, SlackToolContext> = {
+export const confirmWriteTool = defineBotTool<SlackToolContext>()({
   name: "confirm_write",
   description:
     "Ask the user to approve a write before you perform it. Posts a " +
@@ -42,4 +42,4 @@ export const confirmWriteTool: BotTool<typeof confirmWriteSchema, SlackToolConte
       ? "The user APPROVED the write — proceed."
       : "The user DECLINED — do not write; acknowledge and stop.";
   },
-};
+});

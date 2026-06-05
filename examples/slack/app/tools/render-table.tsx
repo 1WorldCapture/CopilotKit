@@ -12,7 +12,7 @@
  */
 import { z } from "zod";
 import { Message, Header, Table, Row, Cell } from "@copilotkit/bot-ui";
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 const schema = z.object({
@@ -89,7 +89,7 @@ export function toMonospaceTable(cols: Column[], dataRows: string[][]): string {
   return "```\n" + [fmt(header), ...body.map(fmt)].join("\n") + "\n```";
 }
 
-export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
+export const renderTableTool = defineBotTool<SlackToolContext>()({
   name: "render_table",
   description:
     "Render tabular data as a table posted to the Slack thread. Pass columns " +
@@ -138,4 +138,4 @@ export const renderTableTool: BotTool<typeof schema, SlackToolContext> = {
       return "Rendered the table (monospace fallback) for the user.";
     }
   },
-};
+});

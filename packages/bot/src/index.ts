@@ -33,7 +33,7 @@ export type { ActionStore, ActionSnapshot } from "./action-store.js";
 export { ActionRegistry, ActionExpiredError } from "./action-registry.js";
 
 // Tools & context
-export { toAgentToolDescriptors, parseToolArgs, stringifyHandlerResult } from "./tools.js";
+export { toAgentToolDescriptors, parseToolArgs, stringifyHandlerResult, defineBotTool } from "./tools.js";
 export type {
   BotTool,
   AnyBotTool,

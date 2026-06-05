@@ -6,7 +6,8 @@
  * `thread.post`. The tool NAMES, descriptions and input schemas preserve the
  * legacy `componentToFrontendTool(defineSlackComponent(...))` contract.
  */
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
+import type { SlackToolContext } from "@copilotkit/bot-slack";
 import {
   IssueCard,
   IssueList,
@@ -16,7 +17,7 @@ import {
   pageListSchema,
 } from "../components/index.js";
 
-export const issueCardTool: BotTool<typeof issueCardSchema> = {
+export const issueCardTool = defineBotTool<SlackToolContext>()({
   name: "issue_card",
   description:
     "Render ONE Linear issue as a rich Block Kit card with a status header, " +
@@ -28,9 +29,9 @@ export const issueCardTool: BotTool<typeof issueCardSchema> = {
     await thread.post(<IssueCard {...props} />);
     return "Displayed the issue card to the user.";
   },
-};
+});
 
-export const issueListTool: BotTool<typeof issueListSchema> = {
+export const issueListTool = defineBotTool<SlackToolContext>()({
   name: "issue_list",
   description:
     "Render a list of Linear issues as a Block Kit card — a header plus one " +
@@ -43,9 +44,9 @@ export const issueListTool: BotTool<typeof issueListSchema> = {
     await thread.post(<IssueList {...props} />);
     return "Displayed the issue list to the user.";
   },
-};
+});
 
-export const pageListTool: BotTool<typeof pageListSchema> = {
+export const pageListTool = defineBotTool<SlackToolContext>()({
   name: "page_list",
   description:
     "Render a list of Notion pages as a Block Kit card — a header plus one " +
@@ -57,4 +58,4 @@ export const pageListTool: BotTool<typeof pageListSchema> = {
     await thread.post(<PageList {...props} />);
     return "Displayed the Notion pages to the user.";
   },
-};
+});

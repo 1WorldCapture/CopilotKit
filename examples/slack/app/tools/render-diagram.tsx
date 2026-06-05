@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { Context } from "@copilotkit/bot-ui";
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 import { renderDiagram } from "../render/diagram.js";
 
@@ -34,7 +34,7 @@ function slug(s: string): string {
   );
 }
 
-export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
+export const renderDiagramTool = defineBotTool<SlackToolContext>()({
   name: "render_diagram",
   description:
     "Render a Mermaid diagram as an image and post it to the Slack thread. " +
@@ -63,4 +63,4 @@ export const renderDiagramTool: BotTool<typeof schema, SlackToolContext> = {
       return `Diagram render failed: ${(e as Error).message}. Fix the Mermaid syntax and retry.`;
     }
   },
-};
+});

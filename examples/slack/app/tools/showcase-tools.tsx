@@ -22,7 +22,7 @@ import {
   Button,
 } from "@copilotkit/bot-ui";
 import type { InteractionContext } from "@copilotkit/bot-ui";
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 // ── show_incident ──────────────────────────────────────────────────────────
@@ -82,20 +82,19 @@ export function IncidentCard({ id, title, severity, summary }: IncidentProps) {
   );
 }
 
-export const showIncidentTool: BotTool<typeof incidentSchema, SlackToolContext> =
-  {
-    name: "show_incident",
-    description:
-      "Render an interactive incident card with Acknowledge/Escalate buttons. " +
-      "Pass id, title, severity (SEV1/SEV2/SEV3) and a one-paragraph summary. " +
-      "The accent colour reflects severity; clicking Acknowledge updates the " +
-      "card in place, clicking Escalate posts a paging notice.",
-    parameters: incidentSchema,
-    async handler(props, { thread }) {
-      await thread.post(<IncidentCard {...props} />);
-      return "Posted the incident card to the user.";
-    },
-  };
+export const showIncidentTool = defineBotTool<SlackToolContext>()({
+  name: "show_incident",
+  description:
+    "Render an interactive incident card with Acknowledge/Escalate buttons. " +
+    "Pass id, title, severity (SEV1/SEV2/SEV3) and a one-paragraph summary. " +
+    "The accent colour reflects severity; clicking Acknowledge updates the " +
+    "card in place, clicking Escalate posts a paging notice.",
+  parameters: incidentSchema,
+  async handler(props, { thread }) {
+    await thread.post(<IncidentCard {...props} />);
+    return "Posted the incident card to the user.";
+  },
+});
 
 // ── show_status ────────────────────────────────────────────────────────────
 
@@ -127,7 +126,7 @@ export function StatusCard({ heading, fields }: StatusProps) {
   );
 }
 
-export const showStatusTool: BotTool<typeof statusSchema, SlackToolContext> = {
+export const showStatusTool = defineBotTool<SlackToolContext>()({
   name: "show_status",
   description:
     "Render a status card: a heading plus a grid of label/value fields " +
@@ -138,7 +137,7 @@ export const showStatusTool: BotTool<typeof statusSchema, SlackToolContext> = {
     await thread.post(<StatusCard {...props} />);
     return "Posted the status card to the user.";
   },
-};
+});
 
 // ── show_links ─────────────────────────────────────────────────────────────
 
@@ -171,7 +170,7 @@ export function LinksCard({ heading, links }: LinksProps) {
   );
 }
 
-export const showLinksTool: BotTool<typeof linksSchema, SlackToolContext> = {
+export const showLinksTool = defineBotTool<SlackToolContext>()({
   name: "show_links",
   description:
     "Render a card of links: a heading plus a dot-separated row of clickable " +
@@ -181,4 +180,4 @@ export const showLinksTool: BotTool<typeof linksSchema, SlackToolContext> = {
     await thread.post(<LinksCard {...props} />);
     return "Posted the links to the user.";
   },
-};
+});

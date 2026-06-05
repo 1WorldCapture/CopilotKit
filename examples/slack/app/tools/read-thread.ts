@@ -10,7 +10,7 @@
  * Slack-aware tool uses.
  */
 import { z } from "zod";
-import type { BotTool } from "@copilotkit/bot";
+import { defineBotTool } from "@copilotkit/bot";
 import type { SlackToolContext } from "@copilotkit/bot-slack";
 
 const readThreadSchema = z.object({
@@ -32,7 +32,7 @@ interface SlackReply {
   ts?: string;
 }
 
-export const readThreadTool: BotTool<typeof readThreadSchema, SlackToolContext> = {
+export const readThreadTool = defineBotTool<SlackToolContext>()({
   name: "read_thread",
   description:
     "Fetch the messages in the current Slack thread so you can summarize or " +
@@ -72,4 +72,4 @@ export const readThreadTool: BotTool<typeof readThreadSchema, SlackToolContext> 
       };
     }
   },
-};
+});
