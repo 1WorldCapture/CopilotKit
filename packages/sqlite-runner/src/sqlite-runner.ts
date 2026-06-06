@@ -1,34 +1,27 @@
-import {
-  AgentRunner,
-  finalizeRunEvents,
-  type AgentRunnerConnectRequest,
-  type AgentRunnerIsRunningRequest,
-  type AgentRunnerRunRequest,
-  type AgentRunnerStopRequest,
+import { AgentRunner, finalizeRunEvents } from "@copilotkit/runtime/v2";
+import type {
+  AgentRunnerConnectRequest,
+  AgentRunnerIsRunningRequest,
+  AgentRunnerRunRequest,
+  AgentRunnerStopRequest,
 } from "@copilotkit/runtime/v2";
-import { Observable, ReplaySubject } from "rxjs";
-import {
+import type { Observable } from "rxjs";
+import { ReplaySubject } from "rxjs";
+import type {
   AbstractAgent,
   BaseEvent,
   RunAgentInput,
-  EventType,
   RunStartedEvent,
-  compactEvents,
 } from "@ag-ui/client";
+import { EventType, compactEvents } from "@ag-ui/client";
 import Database from "better-sqlite3";
-
-const SCHEMA_VERSION = 1;
-
-interface AgentRunRecord {
-  id: number;
-  thread_id: string;
-  run_id: string;
-  parent_run_id: string | null;
-  events: BaseEvent[];
-  input: RunAgentInput;
-  created_at: number;
-  version: number;
-}
+import {
+  backfillThreadMetadata,
+  initializeSchema,
+  listAgentRuns,
+  SCHEMA_VERSION,
+  upsertThreadRunMetadata,
+} from "./sqlite-thread-storage.js";
 
 export interface SqliteAgentRunnerOptions {
   dbPath?: string;
@@ -70,58 +63,8 @@ export class SqliteAgentRunner extends AgentRunner {
   }
 
   private initializeSchema(): void {
-    // Create the agent_runs table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS agent_runs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        thread_id TEXT NOT NULL,
-        run_id TEXT NOT NULL UNIQUE,
-        parent_run_id TEXT,
-        events TEXT NOT NULL,
-        input TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        version INTEGER NOT NULL
-      )
-    `);
-
-    // Create run_state table to track active runs
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS run_state (
-        thread_id TEXT PRIMARY KEY,
-        is_running INTEGER DEFAULT 0,
-        current_run_id TEXT,
-        updated_at INTEGER NOT NULL
-      )
-    `);
-
-    // Create indexes for efficient queries
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_thread_id ON agent_runs(thread_id);
-      CREATE INDEX IF NOT EXISTS idx_parent_run_id ON agent_runs(parent_run_id);
-    `);
-
-    // Create schema version table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS schema_version (
-        version INTEGER PRIMARY KEY,
-        applied_at INTEGER NOT NULL
-      )
-    `);
-
-    // Check and set schema version
-    const currentVersion = this.db
-      .prepare(
-        "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
-      )
-      .get() as { version: number } | undefined;
-
-    if (!currentVersion || currentVersion.version < SCHEMA_VERSION) {
-      this.db
-        .prepare(
-          "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, ?)",
-        )
-        .run(SCHEMA_VERSION, Date.now());
-    }
+    initializeSchema(this.db);
+    backfillThreadMetadata(this.db);
   }
 
   private storeRun(
@@ -129,20 +72,22 @@ export class SqliteAgentRunner extends AgentRunner {
     runId: string,
     events: BaseEvent[],
     input: RunAgentInput,
+    agentId: string,
     parentRunId?: string | null,
   ): void {
     // Compact ONLY the events from this run
     const compactedEvents = compactEvents(events);
 
     const stmt = this.db.prepare(`
-      INSERT INTO agent_runs (thread_id, run_id, parent_run_id, events, input, created_at, version)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agent_runs (thread_id, run_id, parent_run_id, agent_id, events, input, created_at, version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       threadId,
       runId,
       parentRunId ?? null,
+      agentId,
       JSON.stringify(compactedEvents), // Store only this run's compacted events
       JSON.stringify(input),
       Date.now(),
@@ -150,36 +95,8 @@ export class SqliteAgentRunner extends AgentRunner {
     );
   }
 
-  private getHistoricRuns(threadId: string): AgentRunRecord[] {
-    const stmt = this.db.prepare(`
-      WITH RECURSIVE run_chain AS (
-        -- Base case: find the root runs (those without parent)
-        SELECT * FROM agent_runs 
-        WHERE thread_id = ? AND parent_run_id IS NULL
-        
-        UNION ALL
-        
-        -- Recursive case: find children of current level
-        SELECT ar.* FROM agent_runs ar
-        INNER JOIN run_chain rc ON ar.parent_run_id = rc.run_id
-        WHERE ar.thread_id = ?
-      )
-      SELECT * FROM run_chain
-      ORDER BY created_at ASC
-    `);
-
-    const rows = stmt.all(threadId, threadId) as any[];
-
-    return rows.map((row) => ({
-      id: row.id,
-      thread_id: row.thread_id,
-      run_id: row.run_id,
-      parent_run_id: row.parent_run_id,
-      events: JSON.parse(row.events),
-      input: JSON.parse(row.input),
-      created_at: row.created_at,
-      version: row.version,
-    }));
+  private getHistoricRuns(threadId: string): ReturnType<typeof listAgentRuns> {
+    return listAgentRuns(this.db, threadId);
   }
 
   private getLatestRunId(threadId: string): string | null {
@@ -339,8 +256,13 @@ export class SqliteAgentRunner extends AgentRunner {
           request.input.runId,
           currentRunEvents,
           request.input,
+          request.agent.agentId ?? "default",
           parentRunId,
         );
+        upsertThreadRunMetadata(this.db, {
+          threadId: request.threadId,
+          agentId: request.agent.agentId ?? "default",
+        });
 
         // Mark run as complete in database
         this.setRunState(request.threadId, false);
@@ -374,8 +296,13 @@ export class SqliteAgentRunner extends AgentRunner {
             request.input.runId,
             currentRunEvents,
             request.input,
+            request.agent.agentId ?? "default",
             parentRunId,
           );
+          upsertThreadRunMetadata(this.db, {
+            threadId: request.threadId,
+            agentId: request.agent.agentId ?? "default",
+          });
         }
 
         // Mark run as complete in database

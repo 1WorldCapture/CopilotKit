@@ -1,8 +1,14 @@
 # CopilotKit Threads (React)
 
-This skill builds on `copilotkit/agent-access`. Durable threads only exist
-in Intelligence mode — a runtime pointed at `api.cloud.copilotkit.ai` or a
-self-managed Intelligence instance. In plain SSE mode the hook errors.
+This skill builds on `copilotkit/agent-access`. Durable threads work in:
+
+- Intelligence mode — a runtime pointed at `api.cloud.copilotkit.ai` or a
+  self-managed Intelligence instance.
+- Self-hosted SSE mode when the runtime is configured with a `threadBackend`
+  such as `SqliteThreadBackend`.
+
+Plain SSE mode without a configured thread backend still falls back to the
+in-memory local-dev path only.
 
 ## Setup
 
@@ -41,6 +47,28 @@ export function ThreadSidebar({ agentId }: { agentId: string }) {
 ```
 
 ## Core Patterns
+
+### Self-hosted SSE runtime with SQLite thread storage
+
+```ts
+import { CopilotRuntime } from "@copilotkit/runtime/v2";
+import {
+  SqliteAgentRunner,
+  SqliteThreadBackend,
+} from "@copilotkit/sqlite-runner";
+
+const dbPath = "/data/copilotkit.sqlite";
+
+const runtime = new CopilotRuntime({
+  agents,
+  runner: new SqliteAgentRunner({ dbPath }),
+  threadBackend: new SqliteThreadBackend({ dbPath }),
+});
+```
+
+`useThreads` continues to use the same REST contract in this setup. There is
+no realtime thread-metadata websocket in the SQLite path, so list/mutation
+flows work over HTTP and refresh on the next fetch or mutation result.
 
 ### Paginated list
 
@@ -104,12 +132,12 @@ export function ThreadSwitcher() {
 
 ## Common Mistakes
 
-### HIGH — Using `useThreads` with an SSE-only runtime
+### HIGH — Using `useThreads` with plain SSE and no thread backend
 
 Wrong:
 
 ```tsx
-// Runtime has no Intelligence configured
+// Runtime has no Intelligence and no thread backend configured
 new CopilotRuntime({ agents });
 
 // Client side:
@@ -120,7 +148,7 @@ const { threads, error } = useThreads({ agentId: "default" });
 Correct:
 
 ```ts
-// Server — upgrade to Intelligence mode:
+// Server — either upgrade to Intelligence mode:
 import {
   CopilotIntelligenceRuntime,
   CopilotKitIntelligence,
@@ -140,14 +168,76 @@ const runtime = new CopilotIntelligenceRuntime({
 });
 ```
 
-`CopilotKitIntelligence` and `CopilotIntelligenceRuntime` are only exposed
-on the `@copilotkit/runtime/v2` subpath — the package root exports SSE
-primitives only.
+Or:
 
-Thread routes only exist in Intelligence mode. In plain SSE the list fetch
-fails and mutations reject.
+```ts
+// Server — stay on SSE and add a durable thread backend:
+import { CopilotRuntime } from "@copilotkit/runtime/v2";
+import {
+  SqliteAgentRunner,
+  SqliteThreadBackend,
+} from "@copilotkit/sqlite-runner";
+
+const dbPath = "/data/copilotkit.sqlite";
+
+const runtime = new CopilotRuntime({
+  agents,
+  runner: new SqliteAgentRunner({ dbPath }),
+  threadBackend: new SqliteThreadBackend({ dbPath }),
+});
+```
+
+Plain SSE without a thread backend cannot serve durable `/threads` data. Add
+Intelligence or configure a self-hosted backend such as SQLite.
 
 Source: `packages/react-core/src/v2/hooks/use-threads.tsx:207-213,229`
+
+### HIGH — Deploying SQLite thread storage to a multi-writer fleet
+
+Wrong:
+
+```ts
+// Multiple stateless app replicas, each with its own local filesystem.
+const dbPath = "/tmp/copilotkit.sqlite";
+```
+
+Correct:
+
+```ts
+// Single writer, or a shared volume with the same SQLite file visible to
+// the runtime and the thread backend.
+const dbPath = "/data/copilotkit.sqlite";
+```
+
+`SqliteAgentRunner` and `SqliteThreadBackend` assume one logical SQLite
+database. Use a single writer or a shared-volume deployment; do not expect
+independent per-instance local files to converge.
+
+### MEDIUM — Forgetting package overrides when consuming a forked prerelease
+
+Example `pnpm` override:
+
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "@copilotkit/runtime": "npm:@your-scope/runtime@1.59.5-internal-sse-thread.0",
+      "@copilotkit/sqlite-runner": "npm:@your-scope/sqlite-runner@1.59.5-internal-sse-thread.0"
+    }
+  }
+}
+```
+
+Example `npm` override:
+
+```json
+{
+  "overrides": {
+    "@copilotkit/runtime": "npm:@your-scope/runtime@1.59.5-internal-sse-thread.0",
+    "@copilotkit/sqlite-runner": "npm:@your-scope/sqlite-runner@1.59.5-internal-sse-thread.0"
+  }
+}
+```
 
 ### HIGH — Expecting `deleteThread` to be recoverable
 

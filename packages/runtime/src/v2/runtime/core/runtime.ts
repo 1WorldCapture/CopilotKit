@@ -28,6 +28,7 @@ import type { AgentRunner } from "../runner/agent-runner";
 import { InMemoryAgentRunner } from "../runner/in-memory";
 import { IntelligenceAgentRunner } from "../runner/intelligence";
 import type { CopilotKitIntelligence } from "../intelligence-platform";
+import type { ThreadBackend } from "../threads";
 import telemetry from "../telemetry/telemetry-client";
 
 export const VERSION = pkg.version;
@@ -142,6 +143,8 @@ interface BaseCopilotRuntimeOptions extends CopilotRuntimeMiddlewares {
   beforeRequestMiddleware?: BeforeRequestMiddleware;
   /** Optional *after* middleware – callback function or webhook URL. */
   afterRequestMiddleware?: AfterRequestMiddleware;
+  /** Optional backend powering thread REST endpoints in SSE mode. */
+  threadBackend?: ThreadBackend;
   /** Signed license token for server-side feature verification. Falls back to COPILOTKIT_LICENSE_TOKEN env var. */
   licenseToken?: string;
   /** Enable debug logging for the event pipeline. */
@@ -160,6 +163,8 @@ export type IdentifyUserCallback = (
 export interface CopilotSseRuntimeOptions extends BaseCopilotRuntimeOptions {
   /** The runner to use for running agents in SSE mode. */
   runner?: AgentRunner;
+  /** Optional backend powering thread REST endpoints in SSE mode. */
+  threadBackend?: ThreadBackend;
   intelligence?: undefined;
   generateThreadNames?: undefined;
 }
@@ -167,6 +172,7 @@ export interface CopilotSseRuntimeOptions extends BaseCopilotRuntimeOptions {
 export interface CopilotIntelligenceRuntimeOptions extends BaseCopilotRuntimeOptions {
   /** Configures Intelligence mode for durable threads and realtime events. */
   intelligence: CopilotKitIntelligence;
+  threadBackend?: never;
   /** Resolves the authenticated user for intelligence requests. */
   identifyUser: IdentifyUserCallback;
   /** Auto-generate short names for newly created threads. */
@@ -193,6 +199,7 @@ export interface CopilotRuntimeLike {
   beforeRequestMiddleware: CopilotRuntimeOptions["beforeRequestMiddleware"];
   afterRequestMiddleware: CopilotRuntimeOptions["afterRequestMiddleware"];
   runner: AgentRunner;
+  threadBackend?: ThreadBackend;
   a2ui: CopilotRuntimeOptions["a2ui"];
   mcpApps: CopilotRuntimeOptions["mcpApps"];
   openGenerativeUI: CopilotRuntimeOptions["openGenerativeUI"];
@@ -207,6 +214,7 @@ export interface CopilotRuntimeLike {
 
 export interface CopilotSseRuntimeLike extends CopilotRuntimeLike {
   intelligence?: undefined;
+  threadBackend?: ThreadBackend;
   mode: RUNTIME_MODE_SSE;
 }
 
@@ -226,6 +234,7 @@ abstract class BaseCopilotRuntime implements CopilotRuntimeLike {
   public beforeRequestMiddleware: CopilotRuntimeOptions["beforeRequestMiddleware"];
   public afterRequestMiddleware: CopilotRuntimeOptions["afterRequestMiddleware"];
   public runner: AgentRunner;
+  public threadBackend?: ThreadBackend;
   public a2ui: CopilotRuntimeOptions["a2ui"];
   public mcpApps: CopilotRuntimeOptions["mcpApps"];
   public openGenerativeUI: CopilotRuntimeOptions["openGenerativeUI"];
@@ -245,6 +254,7 @@ abstract class BaseCopilotRuntime implements CopilotRuntimeLike {
       transcriptionService,
       beforeRequestMiddleware,
       afterRequestMiddleware,
+      threadBackend,
       a2ui,
       mcpApps,
       openGenerativeUI,
@@ -254,6 +264,7 @@ abstract class BaseCopilotRuntime implements CopilotRuntimeLike {
     this.transcriptionService = transcriptionService;
     this.beforeRequestMiddleware = beforeRequestMiddleware;
     this.afterRequestMiddleware = afterRequestMiddleware;
+    this.threadBackend = threadBackend;
     this.a2ui = a2ui || undefined;
     this.mcpApps = mcpApps;
     this.openGenerativeUI = openGenerativeUI;
@@ -399,6 +410,10 @@ export class CopilotRuntime implements CopilotRuntimeLike {
 
   get a2ui(): CopilotRuntimeOptions["a2ui"] {
     return this.delegate.a2ui;
+  }
+
+  get threadBackend(): ThreadBackend | undefined {
+    return this.delegate.threadBackend;
   }
 
   get mcpApps(): CopilotRuntimeOptions["mcpApps"] {

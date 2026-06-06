@@ -291,6 +291,38 @@ describe("useThreads", () => {
     expect(socket.channels[0].topic).toBe("user_meta:jc-1");
   });
 
+  it("fetches threads without subscribing when the runtime has no thread metadata websocket", async () => {
+    mockUseCopilotKit.mockReturnValue({
+      copilotkit: {
+        runtimeUrl: "http://localhost:4000",
+        runtimeConnectionStatus:
+          CopilotKitCoreRuntimeConnectionStatus.Connected,
+        headers: { Authorization: "Bearer test-token" },
+        intelligence: undefined,
+        registerThreadStore: vi.fn(),
+        unregisterThreadStore: vi.fn(),
+      },
+    });
+    fetchMock.mockReturnValueOnce(jsonResponse({ threads: sampleThreads }));
+
+    const { result } = renderHook(() => useThreads(defaultInput));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.threads.map((thread) => thread.id)).toEqual([
+      "t-2",
+      "t-1",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/threads?agentId=agent-1"),
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(getMockSockets()).toHaveLength(0);
+  });
+
   it("stores fetch failures in error state", async () => {
     fetchMock.mockReturnValue(jsonResponse({}, 500));
 

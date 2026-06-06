@@ -13,6 +13,8 @@ import {
 } from "../handlers/handle-threads";
 import { CopilotRuntime } from "../core/runtime";
 import { InMemoryAgentRunner } from "../runner/in-memory";
+import { ThreadBackendRequestError } from "../threads";
+import type { ThreadBackend } from "../threads";
 
 describe("thread handlers", () => {
   const createIdentifyUser = () =>
@@ -41,6 +43,22 @@ describe("thread handlers", () => {
       intelligence: options?.intelligence,
     }) as unknown as CopilotRuntime;
 
+  const createThreadBackendRuntime = (threadBackend: Partial<ThreadBackend>) =>
+    ({
+      agents: Promise.resolve({}),
+      transcriptionService: undefined,
+      beforeRequestMiddleware: undefined,
+      afterRequestMiddleware: undefined,
+      runner: {
+        run: vi.fn(),
+        connect: vi.fn(),
+        isRunning: vi.fn(),
+        stop: vi.fn(),
+      },
+      threadBackend,
+      mode: "sse",
+    }) as unknown as CopilotRuntime;
+
   const createMutationRequest = (
     path: string,
     method: "PATCH" | "POST" | "DELETE",
@@ -64,6 +82,35 @@ describe("thread handlers", () => {
     await expect(response.json()).resolves.toEqual({
       threads: [],
       nextCursor: null,
+    });
+  });
+
+  it("lists threads using the configured SSE thread backend", async () => {
+    const threadBackend = {
+      listThreads: vi.fn().mockResolvedValue({
+        threads: [{ id: "thread-1", name: "Hello", agentId: "agent-1" }],
+        nextCursor: "cursor-2",
+      }),
+    };
+    const runtime = createThreadBackendRuntime(threadBackend);
+
+    const response = await handleListThreads({
+      runtime,
+      request: new Request(
+        "https://example.com/threads?agentId=agent-1&includeArchived=true&limit=10&cursor=cursor-1",
+      ),
+    });
+
+    expect(response.status).toBe(200);
+    expect(threadBackend.listThreads).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      includeArchived: true,
+      limit: 10,
+      cursor: "cursor-1",
+    });
+    await expect(response.json()).resolves.toEqual({
+      threads: [{ id: "thread-1", name: "Hello", agentId: "agent-1" }],
+      nextCursor: "cursor-2",
     });
   });
 
@@ -236,6 +283,88 @@ describe("thread handlers", () => {
     });
   });
 
+  it("updates, archives, and deletes threads using the configured SSE thread backend", async () => {
+    const threadBackend = {
+      updateThread: vi
+        .fn()
+        .mockResolvedValue({ id: "thread-1", name: "Renamed" }),
+      archiveThread: vi.fn().mockResolvedValue(undefined),
+      deleteThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const runtime = createThreadBackendRuntime(threadBackend);
+    const mutationBody = {
+      userId: "ignored-user",
+      agentId: "agent-1",
+      name: "Renamed",
+    };
+
+    const updateResponse = await handleUpdateThread({
+      runtime,
+      request: createMutationRequest(
+        "/threads/thread-1",
+        "PATCH",
+        mutationBody,
+      ),
+      threadId: "thread-1",
+    });
+    expect(updateResponse.status).toBe(200);
+    expect(threadBackend.updateThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      agentId: "agent-1",
+      updates: { name: "Renamed" },
+    });
+
+    const archiveResponse = await handleArchiveThread({
+      runtime,
+      request: createMutationRequest(
+        "/threads/thread-1/archive",
+        "POST",
+        mutationBody,
+      ),
+      threadId: "thread-1",
+    });
+    expect(archiveResponse.status).toBe(200);
+    expect(threadBackend.archiveThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      agentId: "agent-1",
+    });
+
+    const deleteResponse = await handleDeleteThread({
+      runtime,
+      request: createMutationRequest(
+        "/threads/thread-1",
+        "DELETE",
+        mutationBody,
+      ),
+      threadId: "thread-1",
+    });
+    expect(deleteResponse.status).toBe(200);
+    expect(threadBackend.deleteThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      agentId: "agent-1",
+    });
+  });
+
+  it("returns 404 when the configured SSE thread backend reports a missing thread mutation target", async () => {
+    const runtime = createThreadBackendRuntime({
+      updateThread: vi
+        .fn()
+        .mockRejectedValue(new ThreadBackendRequestError("missing", 404)),
+    });
+
+    const response = await handleUpdateThread({
+      runtime,
+      request: createMutationRequest("/threads/thread-404", "PATCH", {
+        agentId: "agent-1",
+        name: "Renamed",
+      }),
+      threadId: "thread-404",
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "missing" });
+  });
+
   it("subscribes to threads using identifyUser", async () => {
     const intelligence = {
       ɵsubscribeToThreads: vi
@@ -262,6 +391,21 @@ describe("thread handlers", () => {
     expect(intelligence.ɵsubscribeToThreads).toHaveBeenCalledWith({
       userId: "user-1",
     });
+  });
+
+  it("returns 204 for thread subscription when only an SSE thread backend is configured", async () => {
+    const runtime = createThreadBackendRuntime({
+      listThreads: vi.fn(),
+    });
+
+    const response = await handleSubscribeToThreads({
+      runtime,
+      request: new Request("https://example.com/threads/subscribe", {
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(204);
   });
 
   it("returns 400 when agentId is invalid for thread mutations", async () => {
@@ -564,6 +708,29 @@ describe("thread handlers", () => {
       expect(response.status).toBe(422);
     });
 
+    it("delegates to the configured SSE thread backend", async () => {
+      const threadBackend = {
+        getThreadMessages: vi
+          .fn()
+          .mockResolvedValue([{ id: "m1", role: "user", content: "hello" }]),
+      };
+      const runtime = createThreadBackendRuntime(threadBackend);
+
+      const response = await handleGetThreadMessages({
+        runtime,
+        request: new Request("https://example.com/threads/thread-1/messages"),
+        threadId: "thread-1",
+      });
+
+      expect(response.status).toBe(200);
+      expect(threadBackend.getThreadMessages).toHaveBeenCalledWith({
+        threadId: "thread-1",
+      });
+      await expect(response.json()).resolves.toEqual({
+        messages: [{ id: "m1", role: "user", content: "hello" }],
+      });
+    });
+
     it("maps tool-call and tool-result messages from the in-memory runner without as-never casts", async () => {
       const runner = new InMemoryAgentRunner();
       const messages = [
@@ -786,6 +953,29 @@ describe("thread handlers", () => {
 
       expect(response.status).toBe(500);
     });
+
+    it("delegates to the configured SSE thread backend", async () => {
+      const threadBackend = {
+        getThreadEvents: vi
+          .fn()
+          .mockResolvedValue([{ type: "RUN_STARTED", runId: "run-1" }]),
+      };
+      const runtime = createThreadBackendRuntime(threadBackend);
+
+      const response = await handleGetThreadEvents({
+        runtime,
+        request: new Request("https://example.com/threads/thread-1/events"),
+        threadId: "thread-1",
+      });
+
+      expect(response.status).toBe(200);
+      expect(threadBackend.getThreadEvents).toHaveBeenCalledWith({
+        threadId: "thread-1",
+      });
+      await expect(response.json()).resolves.toEqual({
+        events: [{ type: "RUN_STARTED", runId: "run-1" }],
+      });
+    });
   });
 
   describe("handleGetThreadState", () => {
@@ -926,6 +1116,27 @@ describe("thread handlers", () => {
       });
 
       expect(response.status).toBe(500);
+    });
+
+    it("delegates to the configured SSE thread backend", async () => {
+      const threadBackend = {
+        getThreadState: vi.fn().mockResolvedValue({ counter: 2 }),
+      };
+      const runtime = createThreadBackendRuntime(threadBackend);
+
+      const response = await handleGetThreadState({
+        runtime,
+        request: new Request("https://example.com/threads/thread-1/state"),
+        threadId: "thread-1",
+      });
+
+      expect(response.status).toBe(200);
+      expect(threadBackend.getThreadState).toHaveBeenCalledWith({
+        threadId: "thread-1",
+      });
+      await expect(response.json()).resolves.toEqual({
+        state: { counter: 2 },
+      });
     });
   });
 });

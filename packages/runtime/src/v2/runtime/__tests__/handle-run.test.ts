@@ -165,11 +165,20 @@ describe("handleRunAgent", () => {
 
   const createMockAgentWithUse = () => {
     const useSpy = vi.fn();
+    const setMessagesSpy = vi.fn();
+    const setStateSpy = vi.fn();
     const agent = {
-      clone: () => ({ ...agent, use: useSpy }),
+      clone: () => ({
+        ...agent,
+        use: useSpy,
+        setMessages: setMessagesSpy,
+        setState: setStateSpy,
+      }),
       use: useSpy,
+      setMessages: setMessagesSpy,
+      setState: setStateSpy,
     } as unknown as AbstractAgent;
-    return { agent, useSpy };
+    return { agent, useSpy, setMessagesSpy, setStateSpy };
   };
 
   const createMockRunner = () => ({
@@ -199,6 +208,47 @@ describe("handleRunAgent", () => {
         forwardedProps: {},
       }),
     });
+
+  it("uses runner.run even when an SSE thread backend is configured", async () => {
+    const { agent } = createMockAgentWithUse();
+    const runSpy = vi.fn(
+      () =>
+        new Observable<BaseEvent>((subscriber) => {
+          subscriber.complete();
+        }),
+    );
+    const threadBackend = {
+      listThreads: vi.fn(),
+      updateThread: vi.fn(),
+      archiveThread: vi.fn(),
+      deleteThread: vi.fn(),
+      getThreadMessages: vi.fn(),
+      getThreadEvents: vi.fn(),
+      getThreadState: vi.fn(),
+    };
+
+    const runtime = {
+      agents: Promise.resolve({ "my-agent": agent }),
+      transcriptionService: undefined,
+      beforeRequestMiddleware: undefined,
+      afterRequestMiddleware: undefined,
+      runner: {
+        ...createMockRunner(),
+        run: runSpy,
+      },
+      threadBackend,
+    } as unknown as CopilotRuntime;
+
+    const response = await handleRunAgent({
+      runtime,
+      request: createRunRequest(),
+      agentId: "my-agent",
+    });
+
+    expect(response.status).toBe(200);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(threadBackend.listThreads).not.toHaveBeenCalled();
+  });
 
   it("applies A2UIMiddleware to all agents when a2ui.enabled is true and no agents filter", async () => {
     const { agent, useSpy } = createMockAgentWithUse();

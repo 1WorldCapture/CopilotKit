@@ -1,5 +1,6 @@
 export * from "./core/runtime";
 export * from "./endpoints";
+export * from "./threads";
 
 // Export agent runners and base types
 export * from "./runner";

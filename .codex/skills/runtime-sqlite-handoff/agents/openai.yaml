@@ -1,0 +1,4 @@
+interface:
+  display_name: "Runtime SQLite Handoff"
+  short_description: "Package and wire forked runtime SQLite flow"
+  default_prompt: "Use $runtime-sqlite-handoff to package forked @copilotkit/runtime and @copilotkit/sqlite-runner, copy them into another app, and wire the SQLite thread backend."

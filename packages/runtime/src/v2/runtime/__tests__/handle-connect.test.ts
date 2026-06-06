@@ -1,9 +1,9 @@
 import { Observable } from "rxjs";
 import { describe, it, expect, vi } from "vitest";
-import { BaseEvent } from "@ag-ui/client";
+import type { BaseEvent } from "@ag-ui/client";
 import { handleConnectAgent } from "../handlers/handle-connect";
-import { CopilotRuntime } from "../core/runtime";
-import { AgentRunnerConnectRequest } from "../runner/agent-runner";
+import type { CopilotRuntime } from "../core/runtime";
+import type { AgentRunnerConnectRequest } from "../runner/agent-runner";
 import { IntelligenceAgentRunner } from "../runner/intelligence";
 
 describe("handleConnectAgent", () => {
@@ -517,6 +517,63 @@ describe("handleConnectAgent", () => {
         errorSpy.mockRestore();
       }
     });
+  });
+
+  it("uses runner.connect even when an SSE thread backend is configured", async () => {
+    const connectSpy = vi.fn(
+      () =>
+        new Observable<BaseEvent>((subscriber) => {
+          subscriber.complete();
+        }),
+    );
+    const threadBackend = {
+      listThreads: vi.fn(),
+      updateThread: vi.fn(),
+      archiveThread: vi.fn(),
+      deleteThread: vi.fn(),
+      getThreadMessages: vi.fn(),
+      getThreadEvents: vi.fn(),
+      getThreadState: vi.fn(),
+    };
+
+    const runtime = {
+      agents: Promise.resolve({ "test-agent": { clone: () => ({}) } }),
+      transcriptionService: undefined,
+      beforeRequestMiddleware: undefined,
+      afterRequestMiddleware: undefined,
+      runner: {
+        run: () =>
+          new Observable<BaseEvent>((subscriber) => {
+            subscriber.complete();
+          }),
+        connect: connectSpy,
+        isRunning: async () => false,
+        stop: async () => false,
+      },
+      threadBackend,
+    } as unknown as CopilotRuntime;
+
+    const response = await handleConnectAgent({
+      runtime,
+      request: new Request("https://example.com/agent/test-agent/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: "thread-1",
+          runId: "run-1",
+          state: {},
+          messages: [],
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        }),
+      }),
+      agentId: "test-agent",
+    });
+
+    expect(response.status).toBe(200);
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(threadBackend.listThreads).not.toHaveBeenCalled();
   });
 
   describe("telemetry", () => {
