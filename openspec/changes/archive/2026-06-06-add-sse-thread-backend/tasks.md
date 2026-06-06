@@ -25,9 +25,9 @@
 ## 4. Frontend Compatibility
 
 - [x] 4.1 Verify `useThreads` works unchanged against an SSE runtime with `threadBackend`.
-- [ ] 4.2 Verify `useThreads` still works against Intelligence mode.
+- [x] 4.2 Verify `useThreads` still works against Intelligence mode.
 - [x] 4.3 Verify `useThreads` preserves current behavior for an SSE runtime without thread backend.
-- [ ] 4.4 Update runtime info capability metadata only if needed for the existing hook and inspector behavior.
+- [x] 4.4 Update runtime info capability metadata only if needed for the existing hook and inspector behavior.
 
 ## 5. Tests
 
@@ -42,5 +42,5 @@
 - [x] 6.1 Document self-hosted SSE thread backend usage with `SqliteAgentRunner` and `SqliteThreadBackend`.
 - [x] 6.2 Document SQLite deployment constraints, including single-writer or shared-volume assumptions.
 - [x] 6.3 Add changesets for every modified package.
-- [ ] 6.4 Publish only modified packages from the fork with a shared internal prerelease version suffix.
+- [x] 6.4 Publish only modified packages from the fork with a shared internal prerelease version suffix.
 - [x] 6.5 Add application-side package manager override examples for consuming the forked packages.
