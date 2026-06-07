@@ -2,6 +2,7 @@ import type { CopilotRuntimeLike } from "../core/runtime";
 import { isIntelligenceRuntime } from "../core/runtime";
 import { errorResponse, isHandlerResponse } from "./shared/json-response";
 import { isValidIdentifier } from "./shared/intelligence-utils";
+import { resolveOwnership } from "./shared/resolve-ownership";
 import type { ThreadBackend } from "../threads";
 import {
   handleArchiveThread as handleArchiveThreadIntelligence,
@@ -89,11 +90,18 @@ export async function handleListThreads(
   }
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     const data = await threadBackend.listThreads({
       agentId,
       ...(includeArchived ? { includeArchived: true } : {}),
       ...(limitParam ? { limit: Number(limitParam) } : {}),
       ...(cursor ? { cursor } : {}),
+      ownership,
     });
 
     return Response.json({
@@ -126,10 +134,17 @@ export async function handleUpdateThread(
   delete updates.userId;
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     const thread = await threadBackend.updateThread({
       threadId: params.threadId,
       agentId,
       updates,
+      ownership,
     });
     return Response.json(thread);
   } catch (error) {
@@ -162,9 +177,16 @@ export async function handleArchiveThread(
   if (isHandlerResponse(agentId)) return agentId;
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     await threadBackend.archiveThread({
       threadId: params.threadId,
       agentId,
+      ownership,
     });
     return Response.json({ threadId: params.threadId, archived: true });
   } catch (error) {
@@ -187,9 +209,16 @@ export async function handleDeleteThread(
   if (isHandlerResponse(agentId)) return agentId;
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     await threadBackend.deleteThread({
       threadId: params.threadId,
       agentId,
+      ownership,
     });
     return Response.json({ threadId: params.threadId, deleted: true });
   } catch (error) {
@@ -206,8 +235,15 @@ export async function handleGetThreadMessages(
   }
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     const messages = await threadBackend.getThreadMessages({
       threadId: params.threadId,
+      ownership,
     });
     return Response.json({ messages });
   } catch (error) {
@@ -227,8 +263,15 @@ export async function handleGetThreadEvents(
   }
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     const events = await threadBackend.getThreadEvents({
       threadId: params.threadId,
+      ownership,
     });
     return Response.json({ events });
   } catch (error) {
@@ -245,8 +288,15 @@ export async function handleGetThreadState(
   }
 
   try {
+    const ownership = await resolveOwnership({
+      runtime: params.runtime,
+      request: params.request,
+    });
+    if (isHandlerResponse(ownership)) return ownership;
+
     const state = await threadBackend.getThreadState({
       threadId: params.threadId,
+      ownership,
     });
     return Response.json({ state });
   } catch (error) {

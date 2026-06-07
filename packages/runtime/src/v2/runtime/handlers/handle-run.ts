@@ -7,6 +7,8 @@ import {
   configureAgentForRequest,
   parseRunRequest,
 } from "./shared/agent-utils";
+import { isHandlerResponse } from "./shared/json-response";
+import { resolveOwnership } from "./shared/resolve-ownership";
 import { handleIntelligenceRun } from "./intelligence/run";
 import { handleSseRun } from "./sse/run";
 
@@ -69,12 +71,18 @@ export async function handleRunAgent({
       });
     }
 
+    const ownership = await resolveOwnership({ runtime, request });
+    if (isHandlerResponse(ownership)) {
+      return ownership;
+    }
+
     return handleSseRun({
       runtime,
       request,
       agent,
       input,
       agentId,
+      ownership,
       debug: runtime.debug,
       logger: runtime.debugLogger,
     });

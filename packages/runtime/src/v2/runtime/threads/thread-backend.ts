@@ -1,4 +1,5 @@
 import type { BaseEvent } from "@ag-ui/client";
+import type { OwnershipContext } from "../core/runtime";
 
 export class ThreadBackendRequestError extends Error {
   constructor(
@@ -44,6 +45,7 @@ export interface ThreadBackendListThreadsRequest {
   includeArchived?: boolean;
   limit?: number;
   cursor?: string;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackendListThreadsResponse {
@@ -55,28 +57,34 @@ export interface ThreadBackendUpdateThreadRequest {
   threadId: string;
   agentId: string;
   updates: Record<string, unknown>;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackendArchiveThreadRequest {
   threadId: string;
   agentId: string;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackendDeleteThreadRequest {
   threadId: string;
   agentId: string;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackendGetThreadMessagesRequest {
   threadId: string;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackendGetThreadEventsRequest {
   threadId: string;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackendGetThreadStateRequest {
   threadId: string;
+  ownership?: OwnershipContext;
 }
 
 export interface ThreadBackend {

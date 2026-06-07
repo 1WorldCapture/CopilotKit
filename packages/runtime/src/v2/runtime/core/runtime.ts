@@ -149,6 +149,8 @@ interface BaseCopilotRuntimeOptions extends CopilotRuntimeMiddlewares {
   licenseToken?: string;
   /** Enable debug logging for the event pipeline. */
   debug?: DebugConfig;
+  /** Optional server-side ownership resolution for shared persistence. */
+  ownership?: CopilotRuntimeOwnershipConfig;
 }
 
 export interface CopilotRuntimeUser {
@@ -159,6 +161,28 @@ export interface CopilotRuntimeUser {
 export type IdentifyUserCallback = (
   request: Request,
 ) => MaybePromise<CopilotRuntimeUser>;
+
+export type OwnershipMode = "required" | "optional" | "disabled";
+
+export interface OwnershipContext {
+  ownerId?: string | null;
+}
+
+export type ResolveOwnershipCallback = (
+  request: Request,
+) => MaybePromise<OwnershipContext | null | undefined>;
+
+export interface CopilotRuntimeOwnershipConfig {
+  /** Global ownership enforcement strategy for self-hosted persistence. */
+  mode?: OwnershipMode;
+  /** Resolves the current owner from the incoming authenticated request. */
+  resolveOwner?: ResolveOwnershipCallback;
+}
+
+export interface ResolvedCopilotRuntimeOwnershipConfig {
+  mode: OwnershipMode;
+  resolveOwner?: ResolveOwnershipCallback;
+}
 
 export interface CopilotSseRuntimeOptions extends BaseCopilotRuntimeOptions {
   /** The runner to use for running agents in SSE mode. */
@@ -203,6 +227,7 @@ export interface CopilotRuntimeLike {
   a2ui: CopilotRuntimeOptions["a2ui"];
   mcpApps: CopilotRuntimeOptions["mcpApps"];
   openGenerativeUI: CopilotRuntimeOptions["openGenerativeUI"];
+  ownership?: ResolvedCopilotRuntimeOwnershipConfig;
   intelligence?: CopilotKitIntelligence;
   identifyUser?: IdentifyUserCallback;
   mode: RuntimeMode;
@@ -213,6 +238,7 @@ export interface CopilotRuntimeLike {
 }
 
 export interface CopilotSseRuntimeLike extends CopilotRuntimeLike {
+  ownership: ResolvedCopilotRuntimeOwnershipConfig;
   intelligence?: undefined;
   threadBackend?: ThreadBackend;
   mode: RUNTIME_MODE_SSE;
@@ -238,6 +264,7 @@ abstract class BaseCopilotRuntime implements CopilotRuntimeLike {
   public a2ui: CopilotRuntimeOptions["a2ui"];
   public mcpApps: CopilotRuntimeOptions["mcpApps"];
   public openGenerativeUI: CopilotRuntimeOptions["openGenerativeUI"];
+  public ownership?: ResolvedCopilotRuntimeOwnershipConfig;
   public licenseChecker?: LicenseChecker;
   public readonly debugEventBus?: DebugEventBus;
   public debug: ResolvedDebugConfig;
@@ -258,6 +285,7 @@ abstract class BaseCopilotRuntime implements CopilotRuntimeLike {
       a2ui,
       mcpApps,
       openGenerativeUI,
+      ownership,
     } = options;
 
     this.agents = agents;
@@ -268,6 +296,7 @@ abstract class BaseCopilotRuntime implements CopilotRuntimeLike {
     this.a2ui = a2ui || undefined;
     this.mcpApps = mcpApps;
     this.openGenerativeUI = openGenerativeUI;
+    this.ownership = normalizeOwnershipConfig(ownership);
     this.runner = runner;
 
     if (process.env.NODE_ENV !== "production") {
@@ -424,6 +453,10 @@ export class CopilotRuntime implements CopilotRuntimeLike {
     return this.delegate.openGenerativeUI;
   }
 
+  get ownership(): ResolvedCopilotRuntimeOwnershipConfig | undefined {
+    return this.delegate.ownership;
+  }
+
   get intelligence(): CopilotKitIntelligence | undefined {
     return this.delegate.intelligence;
   }
@@ -477,4 +510,21 @@ export class CopilotRuntime implements CopilotRuntimeLike {
   get debugLogger(): CopilotRuntimeLogger | undefined {
     return this.delegate.debugLogger;
   }
+}
+
+function normalizeOwnershipConfig(
+  config?: CopilotRuntimeOwnershipConfig,
+): ResolvedCopilotRuntimeOwnershipConfig {
+  const mode = config?.mode ?? "disabled";
+
+  if (mode !== "disabled" && typeof config?.resolveOwner !== "function") {
+    throw new Error(
+      "CopilotRuntime ownership.resolveOwner is required when ownership.mode is enabled.",
+    );
+  }
+
+  return {
+    mode,
+    resolveOwner: config?.resolveOwner,
+  };
 }

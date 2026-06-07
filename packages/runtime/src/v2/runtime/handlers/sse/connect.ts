@@ -1,4 +1,5 @@
-import { CopilotRuntimeLike } from "../../core/runtime";
+import type { CopilotRuntimeLike } from "../../core/runtime";
+import type { OwnershipContext } from "../../core/runtime";
 import { createSseEventResponse } from "../shared/sse-response";
 import { extractForwardableHeaders } from "../header-utils";
 
@@ -7,6 +8,7 @@ interface HandleSseConnectParams {
   request: Request;
   agentId: string;
   threadId: string;
+  ownership: OwnershipContext;
 }
 
 export function handleSseConnect({
@@ -14,6 +16,7 @@ export function handleSseConnect({
   request,
   agentId,
   threadId,
+  ownership,
 }: HandleSseConnectParams): Response {
   return createSseEventResponse({
     request,
@@ -25,6 +28,7 @@ export function handleSseConnect({
       runtime.runner.connect({
         threadId,
         headers: extractForwardableHeaders(request),
+        ownership,
       }),
   });
 }

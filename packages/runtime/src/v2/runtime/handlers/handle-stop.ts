@@ -1,6 +1,8 @@
 import type { CopilotRuntimeLike } from "../core/runtime";
 import { resolveAgents } from "../core/runtime";
 import { EventType } from "@ag-ui/client";
+import { isHandlerResponse } from "./shared/json-response";
+import { resolveOwnership } from "./shared/resolve-ownership";
 
 interface StopAgentParameters {
   request: Request;
@@ -31,7 +33,12 @@ export async function handleStopAgent({
       );
     }
 
-    const stopped = await runtime.runner.stop({ threadId });
+    const ownership = await resolveOwnership({ runtime, request });
+    if (isHandlerResponse(ownership)) {
+      return ownership;
+    }
+
+    const stopped = await runtime.runner.stop({ threadId, ownership });
 
     if (!stopped) {
       return new Response(

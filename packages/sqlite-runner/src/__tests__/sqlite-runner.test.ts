@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { SqliteAgentRunner } from "..";
-import {
-  AbstractAgent,
+import type {
   BaseEvent,
-  EventType,
   Message,
   RunAgentInput,
   RunFinishedEvent,
@@ -12,6 +10,7 @@ import {
   TextMessageEndEvent,
   TextMessageStartEvent,
 } from "@ag-ui/client";
+import { AbstractAgent, EventType } from "@ag-ui/client";
 import { EMPTY, firstValueFrom } from "rxjs";
 import { toArray } from "rxjs/operators";
 import Database from "better-sqlite3";
@@ -446,5 +445,82 @@ describe("SqliteAgentRunner", () => {
       EventType.TOOL_CALL_RESULT,
       EventType.RUN_FINISHED,
     ]);
+  });
+
+  it("requires ownership for required-mode runs", async () => {
+    runner.close();
+    runner = new SqliteAgentRunner({
+      dbPath,
+      ownership: { mode: "required" },
+    });
+
+    expect(() =>
+      runner.run({
+        threadId: "sqlite-owned",
+        agent: new MockAgent(),
+        input: {
+          threadId: "sqlite-owned",
+          runId: "run-owned",
+          messages: [],
+          state: {},
+        },
+      }),
+    ).toThrow("Owner context required");
+  });
+
+  it("enforces ownership-aware connect and stop in optional mode", async () => {
+    runner.close();
+    runner = new SqliteAgentRunner({
+      dbPath,
+      ownership: { mode: "optional" },
+    });
+
+    const threadId = "sqlite-owned-optional";
+    const run$ = runner.run({
+      threadId,
+      agent: new StoppableAgent(2),
+      ownership: { ownerId: "owner-1" },
+      input: {
+        threadId,
+        runId: "run-optional",
+        messages: [],
+        state: {},
+      },
+    });
+    const collected = firstValueFrom(run$.pipe(toArray()));
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await expect(
+      firstValueFrom(
+        runner
+          .connect({
+            threadId,
+            ownership: { ownerId: "owner-2" },
+          })
+          .pipe(toArray()),
+      ),
+    ).resolves.toEqual([]);
+    await expect(
+      runner.isRunning({
+        threadId,
+        ownership: { ownerId: "owner-2" },
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      runner.stop({
+        threadId,
+        ownership: { ownerId: "owner-2" },
+      }),
+    ).resolves.toBe(false);
+
+    await expect(
+      runner.stop({
+        threadId,
+        ownership: { ownerId: "owner-1" },
+      }),
+    ).resolves.toBe(true);
+
+    await collected;
   });
 });

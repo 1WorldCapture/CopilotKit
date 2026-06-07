@@ -42,7 +42,10 @@ describe("handleStopAgent", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(stopSpy).toHaveBeenCalledWith({ threadId: "thread-1" });
+    expect(stopSpy).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      ownership: {},
+    });
     expect(threadBackend.listThreads).not.toHaveBeenCalled();
   });
 });

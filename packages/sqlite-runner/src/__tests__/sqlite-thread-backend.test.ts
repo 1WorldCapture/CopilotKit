@@ -388,6 +388,111 @@ describe("SqliteThreadBackend", () => {
       }),
     ).rejects.toThrow("missing-thread");
   });
+
+  it("enforces required ownership for list and mutation operations", async () => {
+    runner.close();
+    backend.close();
+    runner = new SqliteAgentRunner({
+      dbPath,
+      ownership: { mode: "required" },
+    });
+    backend = new SqliteThreadBackend({
+      dbPath,
+      ownership: { mode: "required" },
+    });
+
+    await runThread({
+      runner,
+      agentId: "agent-1",
+      threadId: "thread-owned",
+      runId: "run-owned",
+      userMessage: { id: "u-owned", role: "user", content: "hello" },
+      events: textReplyEvents("a-owned", "owned"),
+      ownership: { ownerId: "owner-1" },
+    });
+
+    await expect(
+      backend.listThreads({
+        agentId: "agent-1",
+      }),
+    ).rejects.toThrow("Owner context required");
+
+    const listed = await backend.listThreads({
+      agentId: "agent-1",
+      ownership: { ownerId: "owner-1" },
+    });
+    expect(listed.threads.map((thread) => thread.id)).toEqual(["thread-owned"]);
+
+    await expect(
+      backend.updateThread({
+        threadId: "thread-owned",
+        agentId: "agent-1",
+        updates: { name: "nope" },
+        ownership: { ownerId: "owner-2" },
+      }),
+    ).rejects.toThrow("thread-owned");
+
+    await expect(
+      backend.getThreadMessages({
+        threadId: "thread-owned",
+        ownership: { ownerId: "owner-2" },
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("separates public and owned threads in optional mode", async () => {
+    runner.close();
+    backend.close();
+    runner = new SqliteAgentRunner({
+      dbPath,
+      ownership: { mode: "optional" },
+    });
+    backend = new SqliteThreadBackend({
+      dbPath,
+      ownership: { mode: "optional" },
+    });
+
+    await runThread({
+      runner,
+      agentId: "agent-1",
+      threadId: "thread-public",
+      runId: "run-public",
+      userMessage: { id: "u-public", role: "user", content: "public" },
+      events: textReplyEvents("a-public", "public"),
+    });
+    await runThread({
+      runner,
+      agentId: "agent-1",
+      threadId: "thread-owner-1",
+      runId: "run-owner-1",
+      userMessage: { id: "u-owner-1", role: "user", content: "owned" },
+      events: textReplyEvents("a-owner-1", "owned"),
+      ownership: { ownerId: "owner-1" },
+    });
+
+    const publicThreads = await backend.listThreads({
+      agentId: "agent-1",
+      ownership: { ownerId: null },
+    });
+    expect(publicThreads.threads.map((thread) => thread.id)).toEqual([
+      "thread-public",
+    ]);
+
+    const ownedThreads = await backend.listThreads({
+      agentId: "agent-1",
+      ownership: { ownerId: "owner-1" },
+    });
+    expect(ownedThreads.threads.map((thread) => thread.id)).toEqual([
+      "thread-owner-1",
+    ]);
+
+    await expect(
+      backend.getThreadState({
+        threadId: "thread-owner-1",
+        ownership: { ownerId: null },
+      }),
+    ).resolves.toBeNull();
+  });
 });
 
 async function runThread(params: {
@@ -397,6 +502,7 @@ async function runThread(params: {
   runId: string;
   userMessage: Message;
   events: BaseEvent[];
+  ownership?: { ownerId?: string | null };
 }) {
   const agent = new EmitAgent(params.agentId, params.events);
   await firstValueFrom(
@@ -404,6 +510,7 @@ async function runThread(params: {
       .run({
         threadId: params.threadId,
         agent,
+        ownership: params.ownership,
         input: {
           threadId: params.threadId,
           runId: params.runId,

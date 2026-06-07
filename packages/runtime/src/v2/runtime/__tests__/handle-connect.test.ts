@@ -132,6 +132,7 @@ describe("handleConnectAgent", () => {
     expect(recordedRequests[0].headers).not.toHaveProperty("origin");
     expect(recordedRequests[0].headers).not.toHaveProperty("content-type");
     expect(recordedRequests[0].headers).not.toHaveProperty("user-agent");
+    expect(recordedRequests[0].ownership).toEqual({});
   });
 
   it("passes empty headers object when no forwardable headers present", async () => {
@@ -184,6 +185,47 @@ describe("handleConnectAgent", () => {
 
     expect(recordedRequests).toHaveLength(1);
     expect(recordedRequests[0].headers).toEqual({});
+    expect(recordedRequests[0].ownership).toEqual({});
+  });
+
+  it("resolves ownership and forwards it to SSE runner.connect()", async () => {
+    const recordedRequests: AgentRunnerConnectRequest[] = [];
+    const runtime = {
+      ...createMockRuntime(
+        { "test-agent": { clone: () => ({}) } },
+        (request: AgentRunnerConnectRequest) =>
+          new Observable<BaseEvent>((subscriber) => {
+            recordedRequests.push(request);
+            subscriber.complete();
+          }),
+      ),
+      ownership: {
+        mode: "optional",
+        resolveOwner: vi.fn().mockResolvedValue({ ownerId: "owner-1" }),
+      },
+    } as CopilotRuntime;
+
+    const response = await handleConnectAgent({
+      runtime,
+      request: new Request("https://example.com/agent/test-agent/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: "thread-1",
+          runId: "run-1",
+          state: {},
+          messages: [],
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        }),
+      }),
+      agentId: "test-agent",
+    });
+
+    expect(response.status).toBe(200);
+    expect(recordedRequests).toHaveLength(1);
+    expect(recordedRequests[0]?.ownership).toEqual({ ownerId: "owner-1" });
   });
 
   describe("IntelligenceAgentRunner connect planning path", () => {

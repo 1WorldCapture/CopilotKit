@@ -30,6 +30,43 @@ describe("runtime construction", () => {
     expect(runtime.intelligence).toBeUndefined();
   });
 
+  it("normalizes disabled ownership for SSE runtimes by default", () => {
+    const runtime = new CopilotSseRuntime({ agents });
+
+    expect(runtime.ownership).toEqual({
+      mode: "disabled",
+      resolveOwner: undefined,
+    });
+  });
+
+  it("stores SSE ownership configuration when provided", () => {
+    const resolveOwner = vi.fn().mockResolvedValue({ ownerId: "owner-1" });
+    const runtime = new CopilotSseRuntime({
+      agents,
+      ownership: {
+        mode: "required",
+        resolveOwner,
+      },
+    });
+
+    expect(runtime.ownership).toEqual({
+      mode: "required",
+      resolveOwner,
+    });
+  });
+
+  it("rejects enabled ownership mode without a resolver", () => {
+    expect(
+      () =>
+        new CopilotSseRuntime({
+          agents,
+          ownership: {
+            mode: "required",
+          },
+        }),
+    ).toThrow("ownership.resolveOwner");
+  });
+
   it("builds an Intelligence runtime with an Intelligence runner", () => {
     const sdk = createMockIntelligence();
 

@@ -250,6 +250,78 @@ describe("handleRunAgent", () => {
     expect(threadBackend.listThreads).not.toHaveBeenCalled();
   });
 
+  it("resolves ownership and forwards it to SSE runner.run", async () => {
+    const { agent } = createMockAgentWithUse();
+    const runSpy = vi.fn(
+      () =>
+        new Observable<BaseEvent>((subscriber) => {
+          subscriber.complete();
+        }),
+    );
+
+    const runtime = {
+      agents: Promise.resolve({ "my-agent": agent }),
+      transcriptionService: undefined,
+      beforeRequestMiddleware: undefined,
+      afterRequestMiddleware: undefined,
+      runner: {
+        ...createMockRunner(),
+        run: runSpy,
+      },
+      ownership: {
+        mode: "optional",
+        resolveOwner: vi.fn().mockResolvedValue({ ownerId: "owner-1" }),
+      },
+    } as unknown as CopilotRuntime;
+
+    const response = await handleRunAgent({
+      runtime,
+      request: createRunRequest(),
+      agentId: "my-agent",
+    });
+
+    expect(response.status).toBe(200);
+    expect(runSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownership: { ownerId: "owner-1" },
+      }),
+    );
+  });
+
+  it("returns 403 before runner.run when required ownership is missing", async () => {
+    const { agent } = createMockAgentWithUse();
+    const runSpy = vi.fn(
+      () =>
+        new Observable<BaseEvent>((subscriber) => {
+          subscriber.complete();
+        }),
+    );
+
+    const runtime = {
+      agents: Promise.resolve({ "my-agent": agent }),
+      transcriptionService: undefined,
+      beforeRequestMiddleware: undefined,
+      afterRequestMiddleware: undefined,
+      runner: {
+        ...createMockRunner(),
+        run: runSpy,
+      },
+      ownership: {
+        mode: "required",
+        resolveOwner: vi.fn().mockResolvedValue(null),
+      },
+    } as unknown as CopilotRuntime;
+
+    const response = await handleRunAgent({
+      runtime,
+      request: createRunRequest(),
+      agentId: "my-agent",
+    });
+
+    expect(response.status).toBe(403);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
   it("applies A2UIMiddleware to all agents when a2ui.enabled is true and no agents filter", async () => {
     const { agent, useSpy } = createMockAgentWithUse();
 

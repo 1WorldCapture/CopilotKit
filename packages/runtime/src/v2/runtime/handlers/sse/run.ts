@@ -1,7 +1,8 @@
-import { AbstractAgent, RunAgentInput } from "@ag-ui/client";
-import { ResolvedDebugConfig } from "@copilotkit/shared";
-import { type CopilotRuntimeLogger } from "../../../../lib/logger";
-import { CopilotRuntimeLike } from "../../core/runtime";
+import type { AbstractAgent, RunAgentInput } from "@ag-ui/client";
+import type { ResolvedDebugConfig } from "@copilotkit/shared";
+import type { CopilotRuntimeLogger } from "../../../../lib/logger";
+import type { CopilotRuntimeLike } from "../../core/runtime";
+import type { OwnershipContext } from "../../core/runtime";
 import { createSseEventResponse } from "../shared/sse-response";
 
 interface HandleSseRunParams {
@@ -10,6 +11,7 @@ interface HandleSseRunParams {
   agent: AbstractAgent;
   input: RunAgentInput;
   agentId: string;
+  ownership: OwnershipContext;
   debug?: ResolvedDebugConfig;
   /** Pre-created logger instance to avoid creating a new pino logger per request. */
   logger?: CopilotRuntimeLogger;
@@ -21,6 +23,7 @@ export function handleSseRun({
   agent,
   input,
   agentId,
+  ownership,
   debug,
   logger,
 }: HandleSseRunParams): Response {
@@ -35,6 +38,7 @@ export function handleSseRun({
         threadId: input.threadId,
         agent,
         input,
+        ownership,
       }),
   });
 }

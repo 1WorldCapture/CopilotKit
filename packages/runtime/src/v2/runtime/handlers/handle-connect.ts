@@ -2,11 +2,13 @@ import { handleIntelligenceConnect } from "./intelligence/connect";
 import { handleSseConnect } from "./sse/connect";
 import { isIntelligenceRuntime } from "../core/runtime";
 import { telemetry } from "../telemetry";
+import type { RunAgentParameters as ConnectAgentParameters } from "./shared/agent-utils";
 import {
   parseConnectRequest,
-  RunAgentParameters as ConnectAgentParameters,
   cloneAgentForRequest,
 } from "./shared/agent-utils";
+import { isHandlerResponse } from "./shared/json-response";
+import { resolveOwnership } from "./shared/resolve-ownership";
 
 export async function handleConnectAgent({
   runtime,
@@ -48,11 +50,17 @@ export async function handleConnectAgent({
       });
     }
 
+    const ownership = await resolveOwnership({ runtime, request });
+    if (isHandlerResponse(ownership)) {
+      return ownership;
+    }
+
     return handleSseConnect({
       runtime,
       request,
       agentId,
       threadId: connectRequest.input.threadId,
+      ownership,
     });
   } catch (error) {
     console.error("Error running agent:", error);

@@ -15,6 +15,7 @@ import type {
 } from "@ag-ui/client";
 import { EventType, compactEvents } from "@ag-ui/client";
 import Database from "better-sqlite3";
+import type { OwnershipContext, OwnershipMode } from "@copilotkit/runtime/v2";
 import {
   backfillThreadMetadata,
   initializeSchema,
@@ -22,9 +23,12 @@ import {
   SCHEMA_VERSION,
   upsertThreadRunMetadata,
 } from "./sqlite-thread-storage.js";
+import { getOwnershipOwnerId, normalizeOwnershipMode } from "./ownership.js";
+import type { SqliteOwnershipOptions } from "./ownership.js";
 
 export interface SqliteAgentRunnerOptions {
   dbPath?: string;
+  ownership?: SqliteOwnershipOptions;
 }
 
 interface ActiveConnectionContext {
@@ -40,6 +44,7 @@ const ACTIVE_CONNECTIONS = new Map<string, ActiveConnectionContext>();
 
 export class SqliteAgentRunner extends AgentRunner {
   private db: any;
+  private ownershipMode: OwnershipMode;
 
   constructor(options: SqliteAgentRunnerOptions = {}) {
     super();
@@ -59,6 +64,7 @@ export class SqliteAgentRunner extends AgentRunner {
     }
 
     this.db = new Database(dbPath);
+    this.ownershipMode = normalizeOwnershipMode(options.ownership?.mode);
     this.initializeSchema();
   }
 
@@ -73,14 +79,15 @@ export class SqliteAgentRunner extends AgentRunner {
     events: BaseEvent[],
     input: RunAgentInput,
     agentId: string,
+    ownerId: string | null | undefined,
     parentRunId?: string | null,
   ): void {
     // Compact ONLY the events from this run
     const compactedEvents = compactEvents(events);
 
     const stmt = this.db.prepare(`
-      INSERT INTO agent_runs (thread_id, run_id, parent_run_id, agent_id, events, input, created_at, version)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agent_runs (thread_id, run_id, parent_run_id, agent_id, owner_id, events, input, created_at, version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -88,6 +95,7 @@ export class SqliteAgentRunner extends AgentRunner {
       runId,
       parentRunId ?? null,
       agentId,
+      ownerId ?? null,
       JSON.stringify(compactedEvents), // Store only this run's compacted events
       JSON.stringify(input),
       Date.now(),
@@ -114,23 +122,46 @@ export class SqliteAgentRunner extends AgentRunner {
   private setRunState(
     threadId: string,
     isRunning: boolean,
+    ownerId: string | null | undefined,
     runId?: string,
   ): void {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO run_state (thread_id, is_running, current_run_id, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO run_state (thread_id, owner_id, is_running, current_run_id, updated_at)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    stmt.run(threadId, isRunning ? 1 : 0, runId ?? null, Date.now());
+    stmt.run(
+      threadId,
+      ownerId ?? null,
+      isRunning ? 1 : 0,
+      runId ?? null,
+      Date.now(),
+    );
   }
 
-  private getRunState(threadId: string): {
+  private getRunState(
+    threadId: string,
+    ownership?: OwnershipContext,
+  ): {
     isRunning: boolean;
     currentRunId: string | null;
   } {
+    const ownerId = getOwnershipOwnerId(this.ownershipMode, ownership);
+    if (
+      this.ownershipMode !== "disabled" &&
+      !this.isThreadAccessible(threadId, ownership)
+    ) {
+      return {
+        isRunning: false,
+        currentRunId: null,
+      };
+    }
+
     const stmt = this.db.prepare(`
-      SELECT is_running, current_run_id FROM run_state WHERE thread_id = ?
+      SELECT is_running, current_run_id FROM run_state
+      WHERE thread_id = @threadId
+      ${this.getOwnerClause("owner_id", ownerId)}
     `);
-    const result = stmt.get(threadId) as
+    const result = stmt.get({ threadId, ownerId }) as
       | { is_running: number; current_run_id: string | null }
       | undefined;
 
@@ -141,14 +172,22 @@ export class SqliteAgentRunner extends AgentRunner {
   }
 
   run(request: AgentRunnerRunRequest): Observable<BaseEvent> {
+    const ownerId = this.getOwnerIdOrThrow(request.ownership);
+    this.assertThreadAccessibleForWrite(request.threadId, request.ownership);
+
     // Check if thread is already running in database
-    const runState = this.getRunState(request.threadId);
+    const runState = this.getRunState(request.threadId, request.ownership);
     if (runState.isRunning) {
       throw new Error("Thread already running");
     }
 
     // Mark thread as running in database
-    this.setRunState(request.threadId, true, request.input.runId);
+    this.setRunState(request.threadId, true, ownerId, request.input.runId);
+    upsertThreadRunMetadata(this.db, {
+      threadId: request.threadId,
+      agentId: request.agent.agentId ?? "default",
+      ownerId,
+    });
 
     // Track seen message IDs and current run events in memory for this run
     const seenMessageIds = new Set<string>();
@@ -257,15 +296,17 @@ export class SqliteAgentRunner extends AgentRunner {
           currentRunEvents,
           request.input,
           request.agent.agentId ?? "default",
+          ownerId,
           parentRunId,
         );
         upsertThreadRunMetadata(this.db, {
           threadId: request.threadId,
           agentId: request.agent.agentId ?? "default",
+          ownerId,
         });
 
         // Mark run as complete in database
-        this.setRunState(request.threadId, false);
+        this.setRunState(request.threadId, false, ownerId);
 
         if (connection) {
           connection.agent = undefined;
@@ -297,16 +338,18 @@ export class SqliteAgentRunner extends AgentRunner {
             currentRunEvents,
             request.input,
             request.agent.agentId ?? "default",
+            ownerId,
             parentRunId,
           );
           upsertThreadRunMetadata(this.db, {
             threadId: request.threadId,
             agentId: request.agent.agentId ?? "default",
+            ownerId,
           });
         }
 
         // Mark run as complete in database
-        this.setRunState(request.threadId, false);
+        this.setRunState(request.threadId, false, ownerId);
 
         if (connection) {
           connection.agent = undefined;
@@ -344,6 +387,10 @@ export class SqliteAgentRunner extends AgentRunner {
 
   connect(request: AgentRunnerConnectRequest): Observable<BaseEvent> {
     const connectionSubject = new ReplaySubject<BaseEvent>(Infinity);
+    if (!this.isThreadAccessible(request.threadId, request.ownership)) {
+      connectionSubject.complete();
+      return connectionSubject.asObservable();
+    }
 
     // Load historic runs from database
     const historicRuns = this.getHistoricRuns(request.threadId);
@@ -368,7 +415,7 @@ export class SqliteAgentRunner extends AgentRunner {
 
     // Bridge active run to connection if exists
     const activeConnection = ACTIVE_CONNECTIONS.get(request.threadId);
-    const runState = this.getRunState(request.threadId);
+    const runState = this.getRunState(request.threadId, request.ownership);
 
     if (
       activeConnection &&
@@ -398,12 +445,12 @@ export class SqliteAgentRunner extends AgentRunner {
   }
 
   isRunning(request: AgentRunnerIsRunningRequest): Promise<boolean> {
-    const runState = this.getRunState(request.threadId);
+    const runState = this.getRunState(request.threadId, request.ownership);
     return Promise.resolve(runState.isRunning);
   }
 
   stop(request: AgentRunnerStopRequest): Promise<boolean | undefined> {
-    const runState = this.getRunState(request.threadId);
+    const runState = this.getRunState(request.threadId, request.ownership);
     if (!runState.isRunning) {
       return Promise.resolve(false);
     }
@@ -420,7 +467,11 @@ export class SqliteAgentRunner extends AgentRunner {
     }
 
     connection.stopRequested = true;
-    this.setRunState(request.threadId, false);
+    this.setRunState(
+      request.threadId,
+      false,
+      getOwnershipOwnerId(this.ownershipMode, request.ownership),
+    );
 
     try {
       agent.abortRun();
@@ -428,9 +479,107 @@ export class SqliteAgentRunner extends AgentRunner {
     } catch (error) {
       console.error("Failed to abort sqlite agent run", error);
       connection.stopRequested = false;
-      this.setRunState(request.threadId, true);
+      this.setRunState(
+        request.threadId,
+        true,
+        getOwnershipOwnerId(this.ownershipMode, request.ownership),
+      );
       return Promise.resolve(false);
     }
+  }
+
+  private getOwnerIdOrThrow(
+    ownership?: OwnershipContext,
+  ): string | null | undefined {
+    const ownerId = getOwnershipOwnerId(this.ownershipMode, ownership);
+
+    if (this.ownershipMode === "required" && ownerId === null) {
+      throw new Error("Owner context required");
+    }
+
+    return ownerId;
+  }
+
+  private assertThreadAccessibleForWrite(
+    threadId: string,
+    ownership?: OwnershipContext,
+  ): void {
+    if (this.ownershipMode === "disabled") {
+      return;
+    }
+
+    const existingOwner = this.db
+      .prepare("SELECT owner_id FROM thread_metadata WHERE thread_id = ?")
+      .get(threadId) as { owner_id: string | null } | undefined;
+
+    if (!existingOwner) {
+      return;
+    }
+
+    const ownerId = this.getOwnerIdOrThrow(ownership);
+    const matches =
+      ownerId === null
+        ? existingOwner.owner_id === null
+        : existingOwner.owner_id === ownerId;
+
+    if (!matches) {
+      throw new Error(`Thread '${threadId}' is not accessible`);
+    }
+  }
+
+  private isThreadAccessible(
+    threadId: string,
+    ownership?: OwnershipContext,
+  ): boolean {
+    if (this.ownershipMode === "disabled") {
+      return true;
+    }
+
+    const ownerId = getOwnershipOwnerId(this.ownershipMode, ownership);
+    if (this.ownershipMode === "required" && ownerId === null) {
+      return false;
+    }
+
+    const row = this.db
+      .prepare(
+        `
+          SELECT 1
+          FROM thread_metadata
+          WHERE thread_id = @threadId
+          ${this.getOwnerClause("owner_id", ownerId)}
+        `,
+      )
+      .get({ threadId, ownerId }) as { 1: number } | undefined;
+
+    if (row) {
+      return true;
+    }
+
+    const runStateRow = this.db
+      .prepare(
+        `
+          SELECT 1
+          FROM run_state
+          WHERE thread_id = @threadId
+          ${this.getOwnerClause("owner_id", ownerId)}
+        `,
+      )
+      .get({ threadId, ownerId }) as { 1: number } | undefined;
+
+    return !!runStateRow;
+  }
+
+  private getOwnerClause(
+    columnName: string,
+    ownerId: string | null | undefined,
+  ): string {
+    if (this.ownershipMode === "disabled") {
+      return "";
+    }
+
+    return ownerId === null
+      ? `AND ${columnName} IS NULL`
+      : `AND ${columnName} = @ownerId`;
   }
 
   /**

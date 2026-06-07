@@ -107,10 +107,38 @@ describe("thread handlers", () => {
       includeArchived: true,
       limit: 10,
       cursor: "cursor-1",
+      ownership: {},
     });
     await expect(response.json()).resolves.toEqual({
       threads: [{ id: "thread-1", name: "Hello", agentId: "agent-1" }],
       nextCursor: "cursor-2",
+    });
+  });
+
+  it("resolves ownership and forwards it to SSE thread backends", async () => {
+    const threadBackend = {
+      listThreads: vi.fn().mockResolvedValue({
+        threads: [],
+        nextCursor: null,
+      }),
+    };
+    const runtime = {
+      ...createThreadBackendRuntime(threadBackend),
+      ownership: {
+        mode: "optional",
+        resolveOwner: vi.fn().mockResolvedValue({ ownerId: "owner-1" }),
+      },
+    } as unknown as CopilotRuntime;
+
+    const response = await handleListThreads({
+      runtime,
+      request: new Request("https://example.com/threads?agentId=agent-1"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(threadBackend.listThreads).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      ownership: { ownerId: "owner-1" },
     });
   });
 
@@ -312,6 +340,7 @@ describe("thread handlers", () => {
       threadId: "thread-1",
       agentId: "agent-1",
       updates: { name: "Renamed" },
+      ownership: {},
     });
 
     const archiveResponse = await handleArchiveThread({
@@ -327,6 +356,7 @@ describe("thread handlers", () => {
     expect(threadBackend.archiveThread).toHaveBeenCalledWith({
       threadId: "thread-1",
       agentId: "agent-1",
+      ownership: {},
     });
 
     const deleteResponse = await handleDeleteThread({
@@ -342,6 +372,7 @@ describe("thread handlers", () => {
     expect(threadBackend.deleteThread).toHaveBeenCalledWith({
       threadId: "thread-1",
       agentId: "agent-1",
+      ownership: {},
     });
   });
 
@@ -725,6 +756,7 @@ describe("thread handlers", () => {
       expect(response.status).toBe(200);
       expect(threadBackend.getThreadMessages).toHaveBeenCalledWith({
         threadId: "thread-1",
+        ownership: {},
       });
       await expect(response.json()).resolves.toEqual({
         messages: [{ id: "m1", role: "user", content: "hello" }],
@@ -971,6 +1003,7 @@ describe("thread handlers", () => {
       expect(response.status).toBe(200);
       expect(threadBackend.getThreadEvents).toHaveBeenCalledWith({
         threadId: "thread-1",
+        ownership: {},
       });
       await expect(response.json()).resolves.toEqual({
         events: [{ type: "RUN_STARTED", runId: "run-1" }],
@@ -1133,6 +1166,7 @@ describe("thread handlers", () => {
       expect(response.status).toBe(200);
       expect(threadBackend.getThreadState).toHaveBeenCalledWith({
         threadId: "thread-1",
+        ownership: {},
       });
       await expect(response.json()).resolves.toEqual({
         state: { counter: 2 },

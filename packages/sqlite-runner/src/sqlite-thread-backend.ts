@@ -7,10 +7,21 @@ import type {
 } from "@ag-ui/client";
 import type {
   ThreadBackend,
+  ThreadBackendArchiveThreadRequest,
+  ThreadBackendDeleteThreadRequest,
+  ThreadBackendGetThreadEventsRequest,
+  ThreadBackendGetThreadMessagesRequest,
+  ThreadBackendGetThreadStateRequest,
+  ThreadBackendListThreadsRequest,
+  ThreadBackendListThreadsResponse,
   ThreadBackendMessage,
+  ThreadBackendUpdateThreadRequest,
   ThreadRecord,
 } from "@copilotkit/runtime/v2";
+import type { OwnershipContext, OwnershipMode } from "@copilotkit/runtime/v2";
 import Database from "better-sqlite3";
+import { getOwnershipOwnerId, normalizeOwnershipMode } from "./ownership.js";
+import type { SqliteOwnershipOptions } from "./ownership.js";
 import {
   backfillThreadMetadata,
   getThreadMetadata,
@@ -21,6 +32,7 @@ import {
 
 export interface SqliteThreadBackendOptions {
   dbPath?: string;
+  ownership?: SqliteOwnershipOptions;
 }
 
 interface CursorPayload {
@@ -58,6 +70,7 @@ class SqliteThreadBackendError extends Error {
 
 export class SqliteThreadBackend implements ThreadBackend {
   private db: any;
+  private ownershipMode: OwnershipMode;
 
   constructor(options: SqliteThreadBackendOptions = {}) {
     const dbPath = options.dbPath ?? ":memory:";
@@ -69,17 +82,16 @@ export class SqliteThreadBackend implements ThreadBackend {
     }
 
     this.db = new Database(dbPath);
+    this.ownershipMode = normalizeOwnershipMode(options.ownership?.mode);
     initializeSchema(this.db);
   }
 
-  async listThreads(request: {
-    agentId: string;
-    includeArchived?: boolean;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{ threads: ThreadRecord[]; nextCursor: string | null }> {
+  async listThreads(
+    request: ThreadBackendListThreadsRequest,
+  ): Promise<ThreadBackendListThreadsResponse> {
     backfillThreadMetadata(this.db, request.agentId);
     const cursor = decodeCursor(request.cursor);
+    const ownerId = this.getOwnerId(request.ownership);
     const limit =
       typeof request.limit === "number" &&
       Number.isFinite(request.limit) &&
@@ -92,6 +104,7 @@ export class SqliteThreadBackend implements ThreadBackend {
           SELECT *
           FROM thread_metadata
           WHERE agent_id = @agentId
+            ${this.getOwnerClause("owner_id", ownerId, "@ownerId")}
             AND (@includeArchived = 1 OR archived = 0)
             AND (
               @cursorSortKey IS NULL OR
@@ -109,6 +122,7 @@ export class SqliteThreadBackend implements ThreadBackend {
       )
       .all({
         agentId: request.agentId,
+        ownerId,
         includeArchived: request.includeArchived ? 1 : 0,
         cursorSortKey: cursor?.sortKey ?? null,
         cursorThreadId: cursor?.threadId ?? null,
@@ -135,12 +149,11 @@ export class SqliteThreadBackend implements ThreadBackend {
     };
   }
 
-  async updateThread(request: {
-    threadId: string;
-    agentId: string;
-    updates: Record<string, unknown>;
-  }): Promise<ThreadRecord> {
-    this.ensureThreadExists(request.threadId, request.agentId);
+  async updateThread(
+    request: ThreadBackendUpdateThreadRequest,
+  ): Promise<ThreadRecord> {
+    const ownerId = this.getOwnerId(request.ownership);
+    this.ensureThreadExists(request.threadId, request.agentId, ownerId);
     const name =
       typeof request.updates.name === "string" || request.updates.name === null
         ? request.updates.name
@@ -151,11 +164,18 @@ export class SqliteThreadBackend implements ThreadBackend {
         .prepare(
           `
             UPDATE thread_metadata
-            SET name = ?, updated_at = ?
-            WHERE thread_id = ? AND agent_id = ?
+            SET name = @name, updated_at = @updatedAt
+            WHERE thread_id = @threadId AND agent_id = @agentId
+            ${this.getOwnerClause("owner_id", ownerId)}
           `,
         )
-        .run(name, Date.now(), request.threadId, request.agentId);
+        .run({
+          name,
+          updatedAt: Date.now(),
+          threadId: request.threadId,
+          agentId: request.agentId,
+          ownerId,
+        });
     }
 
     return (
@@ -164,56 +184,97 @@ export class SqliteThreadBackend implements ThreadBackend {
     );
   }
 
-  async archiveThread(request: {
-    threadId: string;
-    agentId: string;
-  }): Promise<void> {
-    this.ensureThreadExists(request.threadId, request.agentId);
+  async archiveThread(
+    request: ThreadBackendArchiveThreadRequest,
+  ): Promise<void> {
+    const ownerId = this.getOwnerId(request.ownership);
+    this.ensureThreadExists(request.threadId, request.agentId, ownerId);
     this.db
       .prepare(
         `
           UPDATE thread_metadata
-          SET archived = 1, updated_at = ?
-          WHERE thread_id = ? AND agent_id = ?
+          SET archived = 1, updated_at = @updatedAt
+          WHERE thread_id = @threadId AND agent_id = @agentId
+          ${this.getOwnerClause("owner_id", ownerId)}
         `,
       )
-      .run(Date.now(), request.threadId, request.agentId);
+      .run({
+        updatedAt: Date.now(),
+        threadId: request.threadId,
+        agentId: request.agentId,
+        ownerId,
+      });
   }
 
-  async deleteThread(request: {
-    threadId: string;
-    agentId: string;
-  }): Promise<void> {
-    this.ensureThreadExists(request.threadId, request.agentId);
+  async deleteThread(request: ThreadBackendDeleteThreadRequest): Promise<void> {
+    const ownerId = this.getOwnerId(request.ownership);
+    this.ensureThreadExists(request.threadId, request.agentId, ownerId);
     this.db.transaction(() => {
       this.db
         .prepare(
-          "DELETE FROM thread_metadata WHERE thread_id = ? AND agent_id = ?",
+          `
+            DELETE FROM thread_metadata
+            WHERE thread_id = @threadId AND agent_id = @agentId
+            ${this.getOwnerClause("owner_id", ownerId)}
+          `,
         )
-        .run(request.threadId, request.agentId);
+        .run({
+          threadId: request.threadId,
+          agentId: request.agentId,
+          ownerId,
+        });
       this.db
-        .prepare("DELETE FROM agent_runs WHERE thread_id = ?")
-        .run(request.threadId);
+        .prepare(
+          `
+            DELETE FROM agent_runs
+            WHERE thread_id = @threadId
+            ${this.getOwnerClause("owner_id", ownerId)}
+          `,
+        )
+        .run({
+          threadId: request.threadId,
+          ownerId,
+        });
       this.db
-        .prepare("DELETE FROM run_state WHERE thread_id = ?")
-        .run(request.threadId);
+        .prepare(
+          `
+            DELETE FROM run_state
+            WHERE thread_id = @threadId
+            ${this.getOwnerClause("owner_id", ownerId)}
+          `,
+        )
+        .run({
+          threadId: request.threadId,
+          ownerId,
+        });
     })();
   }
 
-  async getThreadMessages(request: {
-    threadId: string;
-  }): Promise<ThreadBackendMessage[]> {
+  async getThreadMessages(
+    request: ThreadBackendGetThreadMessagesRequest,
+  ): Promise<ThreadBackendMessage[]> {
+    if (!this.isThreadAccessible(request.threadId, request.ownership)) {
+      return [];
+    }
     const runs = listAgentRuns(this.db, request.threadId);
     return reconstructThreadMessages(runs);
   }
 
-  async getThreadEvents(request: { threadId: string }): Promise<BaseEvent[]> {
+  async getThreadEvents(
+    request: ThreadBackendGetThreadEventsRequest,
+  ): Promise<BaseEvent[]> {
+    if (!this.isThreadAccessible(request.threadId, request.ownership)) {
+      return [];
+    }
     return getCompactedThreadEvents(this.db, request.threadId);
   }
 
-  async getThreadState(request: {
-    threadId: string;
-  }): Promise<Record<string, unknown> | null> {
+  async getThreadState(
+    request: ThreadBackendGetThreadStateRequest,
+  ): Promise<Record<string, unknown> | null> {
+    if (!this.isThreadAccessible(request.threadId, request.ownership)) {
+      return null;
+    }
     const events = getCompactedThreadEvents(this.db, request.threadId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index]!;
@@ -235,17 +296,80 @@ export class SqliteThreadBackend implements ThreadBackend {
     }
   }
 
-  private ensureThreadExists(threadId: string, agentId: string): void {
+  private ensureThreadExists(
+    threadId: string,
+    agentId: string,
+    ownerId: string | null | undefined,
+  ): void {
     backfillThreadMetadata(this.db, agentId);
     const row = this.db
       .prepare(
-        "SELECT 1 FROM thread_metadata WHERE thread_id = ? AND agent_id = ?",
+        `
+          SELECT 1
+          FROM thread_metadata
+          WHERE thread_id = @threadId AND agent_id = @agentId
+          ${this.getOwnerClause("owner_id", ownerId)}
+        `,
       )
-      .get(threadId, agentId) as { 1: number } | undefined;
+      .get({
+        threadId,
+        agentId,
+        ownerId,
+      }) as { 1: number } | undefined;
 
     if (!row) {
       this.throwThreadNotFound(threadId);
     }
+  }
+
+  private isThreadAccessible(
+    threadId: string,
+    ownership?: OwnershipContext,
+  ): boolean {
+    const ownerId = this.getOwnerId(ownership);
+    if (this.ownershipMode === "disabled") {
+      return true;
+    }
+
+    const row = this.db
+      .prepare(
+        `
+          SELECT 1
+          FROM thread_metadata
+          WHERE thread_id = @threadId
+          ${this.getOwnerClause("owner_id", ownerId)}
+        `,
+      )
+      .get({
+        threadId,
+        ownerId,
+      }) as { 1: number } | undefined;
+
+    return !!row;
+  }
+
+  private getOwnerId(ownership?: OwnershipContext): string | null | undefined {
+    const ownerId = getOwnershipOwnerId(this.ownershipMode, ownership);
+
+    if (this.ownershipMode === "required" && ownerId === null) {
+      throw new SqliteThreadBackendError("Owner context required", 403);
+    }
+
+    return ownerId;
+  }
+
+  private getOwnerClause(
+    columnName: string,
+    ownerId: string | null | undefined,
+    placeholder = "@ownerId",
+  ): string {
+    if (this.ownershipMode === "disabled") {
+      return "";
+    }
+
+    return ownerId === null
+      ? `AND ${columnName} IS NULL`
+      : `AND ${columnName} = ${placeholder}`;
   }
 
   private throwThreadNotFound(threadId: string): never {
