@@ -148,6 +148,12 @@ import { SqliteAgentRunner } from "@copilotkit/sqlite-runner";
 
 new CopilotRuntime({
   agents: { default: agent },
+  ownership: {
+    mode: "required",
+    resolveOwner: async (request) => ({
+      ownerId: await getAuthenticatedUserId(request),
+    }),
+  },
   runner: new SqliteAgentRunner({ dbPath: "./data/threads.db" }),
 });
 // Or upgrade to Intelligence mode for managed durability.
@@ -157,6 +163,36 @@ The default runner is `new InMemoryAgentRunner()`. It keeps state in a `globalTh
 Map — threads are lost on restart, and horizontally-scaled instances see divergent state.
 
 Source: `packages/runtime/src/v2/runtime/runner/in-memory.ts:63-96`.
+
+### Ownership-aware shared persistence
+
+If multiple authenticated users share one self-hosted SQLite database, configure
+ownership at the runtime level and mirror the same mode into
+`SqliteAgentRunner`/`SqliteThreadBackend`.
+
+```typescript
+const runtime = new CopilotRuntime({
+  agents,
+  ownership: {
+    mode: "required",
+    resolveOwner: async (request) => ({
+      ownerId: await getAuthenticatedUserId(request),
+    }),
+  },
+  runner: new SqliteAgentRunner({
+    dbPath: "./data/threads.db",
+    ownership: { mode: "required" },
+  }),
+  threadBackend: new SqliteThreadBackend({
+    dbPath: "./data/threads.db",
+    ownership: { mode: "required" },
+  }),
+});
+```
+
+`resolveOwner` runs server-side on each request. The frontend keeps sending the
+normal CopilotKit payload with a globally unique `threadId`; it does not send
+`ownerId` explicitly.
 
 ### HIGH Setting runner alongside intelligence option
 
